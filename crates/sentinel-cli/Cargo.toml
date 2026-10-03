@@ -1,0 +1,21 @@
+[package]
+name = "sentinel-cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[[bin]]
+name = "sentinel"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+sentinel-core = { path = "../sentinel-core" }
+sentinel-ast = { path = "../sentinel-ast" }
+sentinel-scanner = { path = "../sentinel-scanner" }
+sentinel-llm = { path = "../sentinel-llm" }
+sentinel-report = { path = "../sentinel-report" }
+sentinel-db = { path = "../sentinel-db" }
+colored = "2.1"
+thiserror = "1.0"
+anyhow = "1.0"

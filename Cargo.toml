@@ -1,0 +1,15 @@
+[workspace]
+members = [
+    "crates/sentinel-cli",
+    "crates/sentinel-core",
+    "crates/sentinel-ast",
+    "crates/sentinel-scanner",
+    "crates/sentinel-llm",
+    "crates/sentinel-report",
+    "crates/sentinel-db",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"

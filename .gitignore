@@ -1,0 +1,8 @@
+/target/
+/.sentinel.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+.DS_Store

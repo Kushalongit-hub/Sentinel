@@ -1,0 +1,12 @@
+[package]
+name = "sentinel-llm"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+sentinel-core = { path = "../sentinel-core" }
+thiserror = "1.0"
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }

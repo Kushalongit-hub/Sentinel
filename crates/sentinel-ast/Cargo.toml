@@ -1,0 +1,15 @@
+[package]
+name = "sentinel-ast"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+sentinel-core = { path = "../sentinel-core" }
+tree-sitter = "0.22"
+tree-sitter-python = "0.21"
+tree-sitter-typescript = "0.21"
+tree-sitter-rust = "0.21"
+thiserror = "1.0"
+ignore = "0.4"
+walkdir = "2.5"
