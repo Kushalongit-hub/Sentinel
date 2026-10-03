@@ -1,11 +1,14 @@
 use std::fs;
+use std::collections::HashSet;
 use std::path::Path;
 use thiserror::Error;
 use serde::{Deserialize, Serialize};
 use serde_yaml;
+use regex::Regex;
 
 use sentinel_ast::query_pattern;
 use sentinel_core::{Finding, Severity};
+use sentinel_taint::TaintEngine;
 
 #[derive(Error, Debug)]
 pub enum RuleError {
@@ -24,6 +27,7 @@ pub struct Rule {
     pub message: String,
     pub languages: Vec<String>,
     pub severity: String,
+    pub mode: Option<String>,
     pub pattern: Option<String>,
     pub patterns: Option<Vec<PatternEntry>>,
     #[serde(rename = "pattern-either")]
@@ -32,6 +36,14 @@ pub struct Rule {
     pub pattern_not_inside: Option<String>,
     #[serde(rename = "pattern-inside")]
     pub pattern_inside: Option<String>,
+    #[serde(rename = "pattern-regex")]
+    pub pattern_regex: Option<String>,
+    #[serde(rename = "pattern-sources")]
+    pub pattern_sources: Option<Vec<PatternEntry>>,
+    #[serde(rename = "pattern-sinks")]
+    pub pattern_sinks: Option<Vec<PatternEntry>>,
+    #[serde(rename = "pattern-sanitizers")]
+    pub pattern_sanitizers: Option<Vec<PatternEntry>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -51,6 +63,8 @@ pub enum PatternEntry {
         focus_metavariable: Option<String>,
         #[serde(rename = "metavariable-pattern")]
         metavariable_pattern: Option<serde_yaml::Value>,
+        #[serde(rename = "pattern-regex")]
+        pattern_regex: Option<String>,
     },
 }
 
@@ -102,10 +116,19 @@ impl RuleEngine {
             if !rule.languages.is_empty() && !rule.languages.contains(&language.to_string()) && !rule.languages.contains(&"regex".to_string()) {
                 continue;
             }
+
+            if rule.mode.as_deref() == Some("taint") {
+                if rule.languages.is_empty() || rule.languages.contains(&language.to_string()) {
+                    let mut hits = self.analyze_taint_rule(rule, source, file_path);
+                    findings.append(&mut hits);
+                }
+                continue;
+            }
+
             if self.matches(rule, source) {
                 let line = find_first_line(source, rule.pattern.as_deref().or_else(|| {
                     rule.patterns.as_ref().and_then(|p| first_pattern(p))
-                }).or_else(|| rule.pattern_either.as_ref().and_then(|p| first_pattern(p))).unwrap_or(""));
+                }).or_else(|| rule.pattern_either.as_ref().and_then(|p| first_pattern(p))).or_else(|| rule.pattern_regex.as_deref()).unwrap_or(""));
                 findings.push(Finding {
                     id: format!("{}-{}", rule.id, uuid::Uuid::new_v4().simple()),
                     severity: rule.severity(),
@@ -122,10 +145,35 @@ impl RuleEngine {
                 });
             }
         }
+        let mut seen = HashSet::new();
+        findings.retain(|f| {
+            let key = (f.file.clone(), f.line, f.title.clone());
+            seen.insert(key)
+        });
         findings
     }
 
+    fn analyze_taint_rule(&self, rule: &Rule, source: &str, file_path: &Path) -> Vec<Finding> {
+        let sources = extract_pattern_strings(rule.pattern_sources.as_deref());
+        let sinks = extract_pattern_strings(rule.pattern_sinks.as_deref());
+        let sanitizers = extract_pattern_strings(rule.pattern_sanitizers.as_deref());
+
+        if sinks.is_empty() {
+            return Vec::new();
+        }
+
+        let engine = TaintEngine::new(sources, sinks, sanitizers);
+        engine.analyze_file(source, file_path, &rule.id, &rule.message, rule.severity())
+    }
+
     fn matches(&self, rule: &Rule, source: &str) -> bool {
+        if let Some(pattern_regex) = &rule.pattern_regex {
+            if let Ok(re) = Regex::new(pattern_regex) {
+                if re.is_match(source) {
+                    return true;
+                }
+            }
+        }
         if let Some(pattern) = &rule.pattern {
             if pattern.contains("...") {
                 if ast_matches(source, &rule.languages, pattern) {
@@ -149,14 +197,56 @@ impl RuleEngine {
     }
 }
 
+fn extract_pattern_strings(entries: Option<&[PatternEntry]>) -> Vec<String> {
+    let mut result = Vec::new();
+    if let Some(entries) = entries {
+        for entry in entries {
+            extract_from_entry(entry, &mut result);
+        }
+    }
+    result
+}
+
+fn extract_from_entry(entry: &PatternEntry, result: &mut Vec<String>) {
+    match entry {
+        PatternEntry::Simple(text) => {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() && !trimmed.contains("$") {
+                result.push(trimmed.to_string());
+            }
+        }
+        PatternEntry::Complex { pattern, patterns, pattern_either, .. } => {
+            if let Some(p) = pattern {
+                let trimmed = p.trim();
+                if !trimmed.is_empty() && !trimmed.contains("$") {
+                    result.push(trimmed.to_string());
+                }
+            }
+            if let Some(ps) = patterns {
+                for entry in ps {
+                    extract_from_entry(entry, result);
+                }
+            }
+            if let Some(pe) = pattern_either {
+                for entry in pe {
+                    extract_from_entry(entry, result);
+                }
+            }
+        }
+    }
+}
+
 fn first_pattern(patterns: &[PatternEntry]) -> Option<&str> {
     for p in patterns {
-        if let PatternEntry::Simple(s) = p {
-            return Some(s);
-        }
-        if let PatternEntry::Complex { pattern, .. } = p {
-            if let Some(s) = pattern {
-                return Some(s);
+        match p {
+            PatternEntry::Simple(s) => return Some(s),
+            PatternEntry::Complex { pattern, pattern_regex, .. } => {
+                if let Some(s) = pattern {
+                    return Some(s);
+                }
+                if let Some(s) = pattern_regex {
+                    return Some(s);
+                }
             }
         }
     }
@@ -180,8 +270,18 @@ fn matches_one(entry: &PatternEntry, source: &str, languages: &[String]) -> bool
                 source.contains(text)
             }
         }
-        PatternEntry::Complex { pattern, patterns, pattern_either, pattern_not, pattern_not_inside, pattern_inside, .. } => {
+        PatternEntry::Complex { pattern, patterns, pattern_either, pattern_not, pattern_not_inside, pattern_inside, pattern_regex, .. } => {
             let mut has_positive = false;
+            if let Some(p) = pattern_regex {
+                has_positive = true;
+                if let Ok(re) = Regex::new(p) {
+                    if !re.is_match(source) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
             if let Some(p) = pattern {
                 has_positive = true;
                 if p.contains("...") {
@@ -262,6 +362,12 @@ fn ast_matches(source: &str, languages: &[String], pattern: &str) -> bool {
 fn find_first_line(source: &str, pattern: &str) -> usize {
     if pattern.is_empty() {
         return 1;
+    }
+    if let Ok(re) = Regex::new(pattern) {
+        if let Some(mat) = re.find(source) {
+            let line = source[..mat.start()].lines().count() + 1;
+            return line;
+        }
     }
     source.lines().enumerate().find(|(_, line)| line.contains(pattern)).map(|(i, _)| i + 1).unwrap_or(1)
 }

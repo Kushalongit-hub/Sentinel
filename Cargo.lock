@@ -1262,14 +1262,29 @@ dependencies = [
 name = "sentinel-scanner"
 version = "0.1.0"
 dependencies = [
+ "regex",
  "sentinel-ast",
  "sentinel-core",
+ "sentinel-taint",
  "serde",
  "serde_json",
  "serde_yaml",
  "thiserror",
  "uuid",
  "which",
+]
+
+[[package]]
+name = "sentinel-taint"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "sentinel-ast",
+ "sentinel-core",
+ "thiserror",
+ "tree-sitter",
+ "tree-sitter-typescript",
+ "uuid",
 ]
 
 [[package]]

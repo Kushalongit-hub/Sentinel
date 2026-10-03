@@ -1,0 +1,25 @@
+rules:
+  - id: js-expose-process-env
+    message: >-
+      Detected process.env being passed to a child process or command execution.
+      This may expose sensitive environment variables (API keys, tokens, secrets)
+      to untrusted child processes.
+    metadata:
+      cwe:
+        - "CWE-215: Exposure of Sensitive Information Through Debug Information"
+        - "CWE-526: Information Leakage Through Error Messages"
+      references:
+        - https://nodejs.org/api/process.html#process_process_env
+      category: security
+      technology:
+        - javascript
+        - nodejs
+      subcategory: audit
+      likelihood: MEDIUM
+      impact: HIGH
+      confidence: MEDIUM
+    languages:
+      - javascript
+      - typescript
+    severity: WARNING
+    pattern-regex: process\.env

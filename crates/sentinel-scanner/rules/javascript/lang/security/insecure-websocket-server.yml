@@ -1,0 +1,24 @@
+rules:
+  - id: js-insecure-websocket-server
+    message: >-
+      WebSocket server detected without explicit origin validation or
+      authentication middleware. This may allow unauthorized clients to
+      establish connections and access sensitive functionality.
+    metadata:
+      cwe:
+        - "CWE-346: Origin Validation Error"
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/WebSocket_Security_Cheat_Sheet.html
+      category: security
+      technology:
+        - javascript
+        - websocket
+      subcategory: audit
+      likelihood: MEDIUM
+      impact: MEDIUM
+      confidence: LOW
+    languages:
+      - javascript
+      - typescript
+    severity: INFO
+    pattern-regex: new\s+WebSocketServer\(

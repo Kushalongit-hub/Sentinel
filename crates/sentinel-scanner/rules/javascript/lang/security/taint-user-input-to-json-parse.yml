@@ -1,0 +1,25 @@
+rules:
+  - id: taint-user-input-to-json-parse
+    message: Detected user-controlled input flowing into JSON.parse. Parsing untrusted data can lead to prototype pollution, denial of service, or arbitrary code execution.
+    metadata:
+      cwe:
+        - "CWE-502: Deserialization of Untrusted Data"
+      category: security
+      technology:
+        - javascript
+      subcategory:
+        - vuln
+      likelihood: MEDIUM
+      impact: HIGH
+      confidence: MEDIUM
+    languages:
+      - javascript
+      - typescript
+    severity: WARNING
+    mode: taint
+    pattern-sources:
+      - pattern: req.body
+      - pattern: req.query
+      - pattern: raw.toString()
+    pattern-sinks:
+      - pattern: JSON.parse(

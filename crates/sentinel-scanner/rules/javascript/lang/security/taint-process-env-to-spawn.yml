@@ -1,0 +1,23 @@
+rules:
+  - id: taint-process-env-to-spawn
+    message: Detected process.env flowing into a spawn call. User-controlled environment variables may lead to command injection or privilege escalation.
+    metadata:
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      category: security
+      technology:
+        - javascript
+      subcategory:
+        - audit
+      likelihood: MEDIUM
+      impact: HIGH
+      confidence: MEDIUM
+    languages:
+      - javascript
+      - typescript
+    severity: WARNING
+    mode: taint
+    pattern-sources:
+      - pattern: process.env
+    pattern-sinks:
+      - pattern: spawn(
