@@ -1,6 +1,8 @@
 #![allow(clippy::single_component_path_imports)]
 use serde_json;
 use thiserror::Error;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 use sentinel_core::Finding;
 
@@ -27,6 +29,13 @@ impl SentinelDb {
         Ok(db)
     }
 
+    pub fn new_in_memory() -> Result<Self> {
+        let conn = rusqlite::Connection::open_in_memory()?;
+        let db = Self { conn };
+        db.init_schema()?;
+        Ok(db)
+    }
+
     fn init_schema(&self) -> Result<()> {
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS findings (
@@ -41,7 +50,25 @@ impl SentinelDb {
                 execution_path TEXT NOT NULL,
                 affected_components TEXT NOT NULL,
                 evidence TEXT NOT NULL,
-                recommendation TEXT NOT NULL
+                recommendation TEXT NOT NULL,
+                fingerprint TEXT NOT NULL,
+                scan_id TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                resolved_at TEXT
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS scans (
+                id TEXT PRIMARY KEY,
+                target TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                coverage_notes TEXT NOT NULL,
+                files_scanned INTEGER NOT NULL,
+                symbols_indexed INTEGER NOT NULL,
+                scanners_used TEXT NOT NULL,
+                duration_ms INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )",
             [],
         )?;
@@ -56,19 +83,26 @@ impl SentinelDb {
         )?;
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS memory (
-                id TEXT PRIMARY KEY,
-                key TEXT NOT NULL,
+                key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             )",
             [],
         )?;
+        let _ = self.conn.execute("ALTER TABLE findings ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''", []);
+        let _ = self.conn.execute("ALTER TABLE findings ADD COLUMN scan_id TEXT NOT NULL DEFAULT ''", []);
+        let _ = self.conn.execute("ALTER TABLE findings ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP", []);
+        let _ = self.conn.execute("ALTER TABLE findings ADD COLUMN resolved_at TEXT", []);
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_findings_fingerprint ON findings(fingerprint)", [])?;
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_findings_scan ON findings(scan_id)", [])?;
         Ok(())
     }
 
-    pub fn insert_finding(&self, finding: &Finding) -> Result<()> {
+    pub fn insert_finding(&self, finding: &Finding, scan_id: &str) -> Result<()> {
+        let fingerprint = compute_fingerprint(finding);
+        let now = chrono::Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT OR REPLACE INTO findings (id, severity, confidence, category, file, line, title, description, execution_path, affected_components, evidence, recommendation)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT OR REPLACE INTO findings (id, severity, confidence, category, file, line, title, description, execution_path, affected_components, evidence, recommendation, fingerprint, scan_id, created_at, resolved_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, COALESCE((SELECT resolved_at FROM findings WHERE id = ?1), NULL))",
             rusqlite::params![
                 finding.id,
                 finding.severity.to_string(),
@@ -82,6 +116,9 @@ impl SentinelDb {
                 serde_json::to_string(&finding.affected_components).map_err(|e| DbError::Serialization(e.to_string()))?,
                 serde_json::to_string(&finding.evidence).map_err(|e| DbError::Serialization(e.to_string()))?,
                 finding.recommendation,
+                fingerprint,
+                scan_id,
+                now,
             ],
         )?;
         Ok(())
@@ -115,10 +152,29 @@ impl SentinelDb {
         }
     }
 
-    pub fn upsert_rule(&self, id: &str, name: &str, pattern: &str, severity: &str) -> Result<()> {
+    pub fn resolve_finding(&self, id: &str) -> Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT OR REPLACE INTO rules (id, name, pattern, severity) VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params![id, name, pattern, severity],
+            "UPDATE findings SET resolved_at = ?1 WHERE id = ?2",
+            rusqlite::params![now, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn record_scan(&self, scan_id: &str, target: &str, outcome: &str, coverage_notes: &[String], files_scanned: usize, symbols_indexed: usize, scanners_used: &[String], duration_ms: u128) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO scans (id, target, outcome, coverage_notes, files_scanned, symbols_indexed, scanners_used, duration_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                scan_id,
+                target,
+                outcome,
+                serde_json::to_string(coverage_notes).map_err(|e| DbError::Serialization(e.to_string()))?,
+                files_scanned as i64,
+                symbols_indexed as i64,
+                serde_json::to_string(scanners_used).map_err(|e| DbError::Serialization(e.to_string()))?,
+                duration_ms as i64,
+            ],
         )?;
         Ok(())
     }
@@ -153,6 +209,13 @@ impl SentinelDb {
             Ok(None)
         }
     }
+}
+
+fn compute_fingerprint(finding: &Finding) -> String {
+    let mut hasher = DefaultHasher::new();
+    let key = format!("{}:{}:{}:{}", finding.file.display(), finding.line, finding.title, finding.description);
+    key.hash(&mut hasher);
+    format!("{:x}", hasher.finish())
 }
 
 fn parse_severity(s: &str) -> sentinel_core::Severity {

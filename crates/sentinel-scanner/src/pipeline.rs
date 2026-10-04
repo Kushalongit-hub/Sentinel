@@ -1,6 +1,8 @@
 use std::path::Path;
 use std::time::Instant;
 
+use uuid;
+
 use sentinel_ast::{walk, SymbolExtractor};
 use sentinel_core::{
     Finding, ScanOutcome, ScannerOutcome, ScannerResult, ThresholdConfig,
@@ -41,6 +43,7 @@ pub struct ScanPipelineResult {
     pub outcome: ScanOutcome,
     pub coverage_notes: Vec<String>,
     pub duration_ms: u128,
+    pub scan_id: String,
 }
 
 pub fn run_scan(options: ScanOptions) -> ScanPipelineResult {
@@ -65,6 +68,7 @@ pub fn run_scan(options: ScanOptions) -> ScanPipelineResult {
                 outcome: ScanOutcome::Failed,
                 coverage_notes,
                 duration_ms: 0,
+                scan_id: uuid::Uuid::new_v4().simple().to_string(),
             };
         }
         match walk(&options.target) {
@@ -80,6 +84,7 @@ pub fn run_scan(options: ScanOptions) -> ScanPipelineResult {
                     outcome: ScanOutcome::Failed,
                     coverage_notes,
                     duration_ms: start.elapsed().as_millis(),
+                    scan_id: uuid::Uuid::new_v4().simple().to_string(),
                 };
             }
         }
@@ -166,6 +171,7 @@ pub fn run_scan(options: ScanOptions) -> ScanPipelineResult {
                     outcome,
                     coverage_notes,
                     duration_ms: start.elapsed().as_millis(),
+                    scan_id: uuid::Uuid::new_v4().simple().to_string(),
                 };
             }
         };
@@ -211,6 +217,7 @@ pub fn run_scan(options: ScanOptions) -> ScanPipelineResult {
         outcome,
         coverage_notes,
         duration_ms: start.elapsed().as_millis(),
+        scan_id: uuid::Uuid::new_v4().simple().to_string(),
     }
 }
 
@@ -238,9 +245,22 @@ pub fn persist_and_report(result: ScanPipelineResult, target: &Path) -> anyhow::
     };
 
     for finding in &result.findings {
-        if let Err(e) = db.insert_finding(finding) {
+        if let Err(e) = db.insert_finding(finding, &result.scan_id) {
             eprintln!("[error] finding persist failed: {}", e);
         }
+    }
+
+    if let Err(e) = db.record_scan(
+        &result.scan_id,
+        &target.to_string_lossy(),
+        &format!("{:?}", result.outcome),
+        &result.coverage_notes,
+        result.files_scanned,
+        result.symbols_indexed,
+        &result.scanners_used,
+        result.duration_ms,
+    ) {
+        eprintln!("[error] scan record persist failed: {}", e);
     }
 
     let at_threshold = result
