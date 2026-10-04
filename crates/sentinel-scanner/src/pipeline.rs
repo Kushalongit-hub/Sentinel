@@ -13,6 +13,7 @@ use crate::{normalize_finding, rules::RuleEngine, ScannerRegistry, SubprocessRun
 #[derive(Debug, Clone)]
 pub struct ScanOptions {
     pub target: String,
+    pub files: Vec<std::path::PathBuf>,
     pub threshold: ThresholdConfig,
     pub use_bundled_rules: bool,
     pub external_scanners: bool,
@@ -22,6 +23,7 @@ impl Default for ScanOptions {
     fn default() -> Self {
         Self {
             target: String::new(),
+            files: Vec::new(),
             threshold: ThresholdConfig::default(),
             use_bundled_rules: true,
             external_scanners: true,
@@ -51,24 +53,9 @@ pub fn run_scan(options: ScanOptions) -> ScanPipelineResult {
     let mut symbols_indexed = 0usize;
     let mut outcome = ScanOutcome::Complete;
 
-    if !target.exists() {
-        coverage_notes.push(format!("target does not exist: {}", options.target));
-        return ScanPipelineResult {
-            findings,
-            files_scanned: 0,
-            symbols_indexed: 0,
-            scanners_used: Vec::new(),
-            scanner_results: Vec::new(),
-            outcome: ScanOutcome::Failed,
-            coverage_notes,
-            duration_ms: 0,
-        };
-    }
-
-    let files = match walk(&options.target) {
-        Ok(f) => f,
-        Err(e) => {
-            coverage_notes.push(format!("file walk failed: {}", e));
+    let files: Vec<sentinel_ast::FileEntry> = if options.files.is_empty() {
+        if !target.exists() {
+            coverage_notes.push(format!("target does not exist: {}", options.target));
             return ScanPipelineResult {
                 findings,
                 files_scanned: 0,
@@ -77,9 +64,30 @@ pub fn run_scan(options: ScanOptions) -> ScanPipelineResult {
                 scanner_results: Vec::new(),
                 outcome: ScanOutcome::Failed,
                 coverage_notes,
-                duration_ms: start.elapsed().as_millis(),
+                duration_ms: 0,
             };
         }
+        match walk(&options.target) {
+            Ok(f) => f,
+            Err(e) => {
+                coverage_notes.push(format!("file walk failed: {}", e));
+                return ScanPipelineResult {
+                    findings,
+                    files_scanned: 0,
+                    symbols_indexed: 0,
+                    scanners_used: Vec::new(),
+                    scanner_results: Vec::new(),
+                    outcome: ScanOutcome::Failed,
+                    coverage_notes,
+                    duration_ms: start.elapsed().as_millis(),
+                };
+            }
+        }
+    } else {
+        options.files.into_iter().filter(|p| p.exists()).map(|p| sentinel_ast::FileEntry {
+            path: p.clone(),
+            language: infer_language(&p),
+        }).collect()
     };
 
     let extractor = SymbolExtractor::new();
@@ -254,4 +262,15 @@ pub fn persist_and_report(result: ScanPipelineResult, target: &Path) -> anyhow::
         std::process::exit(1);
     }
     Ok(result.outcome)
+}
+
+fn infer_language(path: &Path) -> Option<String> {
+    let extension = path.extension()?.to_str()?.to_lowercase();
+    match extension.as_str() {
+        "js" | "jsx" => Some("javascript".to_string()),
+        "ts" | "tsx" => Some("typescript".to_string()),
+        "py" => Some("python".to_string()),
+        "rs" => Some("rust".to_string()),
+        _ => None,
+    }
 }

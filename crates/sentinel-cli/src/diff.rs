@@ -1,5 +1,6 @@
 use anyhow::Result;
 use sentinel_scanner::pipeline::{run_scan, persist_and_report, ScanOptions};
+use std::path::{Path, PathBuf};
 
 pub fn diff() -> Result<i32> {
     let output = std::process::Command::new("git")
@@ -12,7 +13,11 @@ pub fn diff() -> Result<i32> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let changed_files: Vec<&str> = stdout.split('\0').filter(|l| !l.is_empty()).collect();
+    let changed_files: Vec<PathBuf> = stdout
+        .split('\0')
+        .filter(|l| !l.is_empty())
+        .map(|l| PathBuf::from(l.to_string()))
+        .collect();
 
     if changed_files.is_empty() {
         println!("No changed files found.");
@@ -23,11 +28,12 @@ pub fn diff() -> Result<i32> {
 
     let options = ScanOptions {
         target: ".".to_string(),
+        files: changed_files,
         ..ScanOptions::default()
     };
 
     let result = run_scan(options);
-    let target = std::path::Path::new(".");
+    let target = Path::new(".");
     let outcome = persist_and_report(result, target)?;
 
     match outcome {
