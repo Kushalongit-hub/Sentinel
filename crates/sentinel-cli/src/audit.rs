@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sentinel_scanner::pipeline::{run_scan, persist_and_report, ScanOptions};
+use sentinel_scanner::pipeline::{persist_and_report, run_scan, ScanOptions};
 
 pub fn audit(path: String) -> Result<i32> {
     let options = ScanOptions {

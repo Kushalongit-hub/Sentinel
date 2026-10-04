@@ -56,7 +56,12 @@ pub fn query_pattern(source: &[u8], language: &str, pattern: &str) -> Result<boo
     }
 }
 
-fn search_nodes(source: &[u8], root: &tree_sitter::Node, node_kinds: &[&str], parts: &[&str]) -> Result<bool> {
+fn search_nodes(
+    source: &[u8],
+    root: &tree_sitter::Node,
+    node_kinds: &[&str],
+    parts: &[&str],
+) -> Result<bool> {
     let mut found = 0;
     if search_nodes_recursive(source, root, node_kinds, parts, &mut found) {
         return Ok(true);
@@ -64,7 +69,13 @@ fn search_nodes(source: &[u8], root: &tree_sitter::Node, node_kinds: &[&str], pa
     Ok(false)
 }
 
-fn search_nodes_recursive(source: &[u8], node: &tree_sitter::Node, node_kinds: &[&str], parts: &[&str], found: &mut i32) -> bool {
+fn search_nodes_recursive(
+    source: &[u8],
+    node: &tree_sitter::Node,
+    node_kinds: &[&str],
+    parts: &[&str],
+    found: &mut i32,
+) -> bool {
     if node_kinds.contains(&node.kind()) {
         *found += 1;
         let text = node_text(source, node);

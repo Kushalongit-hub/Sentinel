@@ -1,7 +1,7 @@
+use sentinel_core::{Finding, Severity};
 use std::collections::HashMap;
 use thiserror::Error;
-use sentinel_core::{Finding, Severity};
-use tree_sitter::{Parser, Node};
+use tree_sitter::{Node, Parser};
 
 #[derive(Error, Debug)]
 pub enum TaintError {
@@ -34,7 +34,10 @@ impl TaintContext {
     }
 
     pub fn get(&self, name: &str) -> TaintLevel {
-        self.variables.get(name).copied().unwrap_or(TaintLevel::Clean)
+        self.variables
+            .get(name)
+            .copied()
+            .unwrap_or(TaintLevel::Clean)
     }
 
     pub fn is_tainted(&self, name: &str) -> bool {
@@ -100,9 +103,18 @@ impl TaintEngine {
         }
     }
 
-    pub fn analyze_file(&self, source: &str, file_path: &std::path::Path, rule_id: &str, message: &str, severity: Severity) -> Vec<Finding> {
+    pub fn analyze_file(
+        &self,
+        source: &str,
+        file_path: &std::path::Path,
+        rule_id: &str,
+        message: &str,
+        severity: Severity,
+    ) -> Vec<Finding> {
         let mut parser = Parser::new();
-        parser.set_language(&tree_sitter_typescript::language_typescript()).ok();
+        parser
+            .set_language(&tree_sitter_typescript::language_typescript())
+            .ok();
         let tree = match parser.parse(source.as_bytes(), None) {
             Some(t) => t,
             None => return Vec::new(),
@@ -176,7 +188,8 @@ fn walk_with_scope(
                     ) {
                         if name_node.kind() == "identifier" {
                             let name = node_text(source.as_bytes(), &name_node);
-                            let tainted = evaluate_taint(source, &value_node, contexts.last(), sources);
+                            let tainted =
+                                evaluate_taint(source, &value_node, contexts.last(), sources);
                             let level = if tainted {
                                 if contains_sanitizer(source, &value_node, sanitizers) {
                                     TaintLevel::Clean
@@ -245,7 +258,8 @@ fn walk_with_scope(
                 walk_with_scope(source, &child, contexts, engine, findings, rule);
             }
         }
-        "if_statement" | "for_in_statement" | "for_of_statement" | "while_statement" | "do_statement" | "try_statement" | "statement_block" => {
+        "if_statement" | "for_in_statement" | "for_of_statement" | "while_statement"
+        | "do_statement" | "try_statement" | "statement_block" => {
             if let Some(block) = node.child_by_field_name("body") {
                 if contexts.last().map(|ctx| ctx.variables.len()) > Some(0) {
                     contexts.push(contexts.last().cloned().unwrap_or_default());
@@ -282,7 +296,12 @@ fn walk_with_scope(
     }
 }
 
-fn evaluate_taint(source: &str, node: &Node, ctx: Option<&TaintContext>, sources: &[String]) -> bool {
+fn evaluate_taint(
+    source: &str,
+    node: &Node,
+    ctx: Option<&TaintContext>,
+    sources: &[String],
+) -> bool {
     let text = node_text(source.as_bytes(), node);
     if sources.iter().any(|s| text.contains(s)) {
         return true;
@@ -302,8 +321,16 @@ fn contains_sanitizer(source: &str, node: &Node, sanitizers: &[String]) -> bool 
     sanitizers.iter().any(|s| text.contains(s))
 }
 
-fn has_tainted_identifier(source: &str, node: &Node, ctx: Option<&TaintContext>, sources: &[String]) -> bool {
-    if sources.iter().any(|s| node_text(source.as_bytes(), node).contains(s)) {
+fn has_tainted_identifier(
+    source: &str,
+    node: &Node,
+    ctx: Option<&TaintContext>,
+    sources: &[String],
+) -> bool {
+    if sources
+        .iter()
+        .any(|s| node_text(source.as_bytes(), node).contains(s))
+    {
         return true;
     }
 
@@ -389,7 +416,13 @@ mod tests {
     exec(data);
 }
 "#;
-        let findings = engine.analyze_file(source, std::path::Path::new("test.js"), "test-taint", "taint test", Severity::High);
+        let findings = engine.analyze_file(
+            source,
+            std::path::Path::new("test.js"),
+            "test-taint",
+            "taint test",
+            Severity::High,
+        );
         assert_eq!(findings.len(), 1);
         assert!(findings[0].line >= 1);
     }
@@ -408,7 +441,13 @@ function test() {
     exec(data);
 }
 "#;
-        let findings = engine.analyze_file(source, std::path::Path::new("test.js"), "test-sanitizer", "sanitizer test", Severity::High);
+        let findings = engine.analyze_file(
+            source,
+            std::path::Path::new("test.js"),
+            "test-sanitizer",
+            "sanitizer test",
+            Severity::High,
+        );
         assert_eq!(findings.len(), 0);
     }
 
@@ -426,7 +465,13 @@ function test() {
     exec(data);
 }
 "#;
-        let findings = engine.analyze_file(source, std::path::Path::new("test.js"), "test-safe", "safe test", Severity::High);
+        let findings = engine.analyze_file(
+            source,
+            std::path::Path::new("test.js"),
+            "test-safe",
+            "safe test",
+            Severity::High,
+        );
         assert_eq!(findings.len(), 0);
     }
 }

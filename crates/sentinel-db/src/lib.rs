@@ -1,8 +1,8 @@
 #![allow(clippy::single_component_path_imports)]
 use serde_json;
-use thiserror::Error;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use thiserror::Error;
 
 use sentinel_core::Finding;
 
@@ -88,12 +88,29 @@ impl SentinelDb {
             )",
             [],
         )?;
-        let _ = self.conn.execute("ALTER TABLE findings ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''", []);
-        let _ = self.conn.execute("ALTER TABLE findings ADD COLUMN scan_id TEXT NOT NULL DEFAULT ''", []);
-        let _ = self.conn.execute("ALTER TABLE findings ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP", []);
-        let _ = self.conn.execute("ALTER TABLE findings ADD COLUMN resolved_at TEXT", []);
-        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_findings_fingerprint ON findings(fingerprint)", [])?;
-        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_findings_scan ON findings(scan_id)", [])?;
+        let _ = self.conn.execute(
+            "ALTER TABLE findings ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+        let _ = self.conn.execute(
+            "ALTER TABLE findings ADD COLUMN scan_id TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+        let _ = self.conn.execute(
+            "ALTER TABLE findings ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            [],
+        );
+        let _ = self
+            .conn
+            .execute("ALTER TABLE findings ADD COLUMN resolved_at TEXT", []);
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_findings_fingerprint ON findings(fingerprint)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_findings_scan ON findings(scan_id)",
+            [],
+        )?;
         Ok(())
     }
 
@@ -161,7 +178,17 @@ impl SentinelDb {
         Ok(())
     }
 
-    pub fn record_scan(&self, scan_id: &str, target: &str, outcome: &str, coverage_notes: &[String], files_scanned: usize, symbols_indexed: usize, scanners_used: &[String], duration_ms: u128) -> Result<()> {
+    pub fn record_scan(
+        &self,
+        scan_id: &str,
+        target: &str,
+        outcome: &str,
+        coverage_notes: &[String],
+        files_scanned: usize,
+        symbols_indexed: usize,
+        scanners_used: &[String],
+        duration_ms: u128,
+    ) -> Result<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO scans (id, target, outcome, coverage_notes, files_scanned, symbols_indexed, scanners_used, duration_ms)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -213,7 +240,13 @@ impl SentinelDb {
 
 fn compute_fingerprint(finding: &Finding) -> String {
     let mut hasher = DefaultHasher::new();
-    let key = format!("{}:{}:{}:{}", finding.file.display(), finding.line, finding.title, finding.description);
+    let key = format!(
+        "{}:{}:{}:{}",
+        finding.file.display(),
+        finding.line,
+        finding.title,
+        finding.description
+    );
     key.hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }

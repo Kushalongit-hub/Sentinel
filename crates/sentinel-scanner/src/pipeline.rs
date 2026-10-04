@@ -4,9 +4,7 @@ use std::time::Instant;
 use uuid;
 
 use sentinel_ast::{walk, SymbolExtractor};
-use sentinel_core::{
-    Finding, ScanOutcome, ScannerOutcome, ScannerResult, ThresholdConfig,
-};
+use sentinel_core::{Finding, ScanOutcome, ScannerOutcome, ScannerResult, ThresholdConfig};
 use sentinel_db::SentinelDb;
 use sentinel_report::render_terminal;
 
@@ -89,22 +87,30 @@ pub fn run_scan(options: ScanOptions) -> ScanPipelineResult {
             }
         }
     } else {
-        options.files.into_iter().filter(|p| p.exists()).map(|p| sentinel_ast::FileEntry {
-            path: p.clone(),
-            language: infer_language(&p),
-        }).collect()
+        options
+            .files
+            .into_iter()
+            .filter(|p| p.exists())
+            .map(|p| sentinel_ast::FileEntry {
+                path: p.clone(),
+                language: infer_language(&p),
+            })
+            .collect()
     };
 
     let extractor = SymbolExtractor::new();
     for entry in &files {
         match std::fs::read(&entry.path) {
-            Ok(source) => {
-                match extractor.extract(&entry.path, &source) {
-                    Ok(symbols) => symbols_indexed += symbols.len(),
-                    Err(_) => coverage_notes.push(format!("symbol extraction failed: {}", entry.path.display())),
-                }
+            Ok(source) => match extractor.extract(&entry.path, &source) {
+                Ok(symbols) => symbols_indexed += symbols.len(),
+                Err(_) => coverage_notes.push(format!(
+                    "symbol extraction failed: {}",
+                    entry.path.display()
+                )),
+            },
+            Err(e) => {
+                coverage_notes.push(format!("file read failed: {}: {}", entry.path.display(), e))
             }
-            Err(e) => coverage_notes.push(format!("file read failed: {}: {}", entry.path.display(), e)),
         }
     }
     let files_scanned = files.len();
@@ -113,36 +119,34 @@ pub fn run_scan(options: ScanOptions) -> ScanPipelineResult {
         let registry = ScannerRegistry::new();
         for scanner in registry.available_scanners() {
             match SubprocessRunner::run(&scanner, &[], target) {
-                Ok(raw) => {
-                    match normalize_finding(&raw, &scanner) {
-                        Ok(Some(finding)) => {
-                            findings.push(finding);
-                            scanners_used.push(scanner.clone());
-                            scanner_results.push(ScannerResult {
-                                name: scanner.clone(),
-                                outcome: ScannerOutcome::Completed,
-                                error: None,
-                            });
-                        }
-                        Ok(None) => {
-                            scanners_used.push(scanner.clone());
-                            scanner_results.push(ScannerResult {
-                                name: scanner.clone(),
-                                outcome: ScannerOutcome::Completed,
-                                error: None,
-                            });
-                        }
-                        Err(e) => {
-                            coverage_notes.push(format!("scanner parse failed: {}: {}", scanner, e));
-                            scanner_results.push(ScannerResult {
-                                name: scanner.clone(),
-                                outcome: ScannerOutcome::Failed,
-                                error: Some(e.to_string()),
-                            });
-                            outcome = ScanOutcome::Incomplete;
-                        }
+                Ok(raw) => match normalize_finding(&raw, &scanner) {
+                    Ok(Some(finding)) => {
+                        findings.push(finding);
+                        scanners_used.push(scanner.clone());
+                        scanner_results.push(ScannerResult {
+                            name: scanner.clone(),
+                            outcome: ScannerOutcome::Completed,
+                            error: None,
+                        });
                     }
-                }
+                    Ok(None) => {
+                        scanners_used.push(scanner.clone());
+                        scanner_results.push(ScannerResult {
+                            name: scanner.clone(),
+                            outcome: ScannerOutcome::Completed,
+                            error: None,
+                        });
+                    }
+                    Err(e) => {
+                        coverage_notes.push(format!("scanner parse failed: {}: {}", scanner, e));
+                        scanner_results.push(ScannerResult {
+                            name: scanner.clone(),
+                            outcome: ScannerOutcome::Failed,
+                            error: Some(e.to_string()),
+                        });
+                        outcome = ScanOutcome::Incomplete;
+                    }
+                },
                 Err(e) => {
                     coverage_notes.push(format!("scanner execution failed: {}: {}", scanner, e));
                     scanner_results.push(ScannerResult {
@@ -185,7 +189,9 @@ pub fn run_scan(options: ScanOptions) -> ScanPipelineResult {
                         let mut hits = rule_engine.scan(lang, &text, &entry.path);
                         rule_findings.append(&mut hits);
                     }
-                    Err(_) => coverage_notes.push(format!("utf8 decode failed: {}", entry.path.display())),
+                    Err(_) => {
+                        coverage_notes.push(format!("utf8 decode failed: {}", entry.path.display()))
+                    }
                 }
             }
         }
@@ -221,7 +227,10 @@ pub fn run_scan(options: ScanOptions) -> ScanPipelineResult {
     }
 }
 
-pub fn persist_and_report(result: ScanPipelineResult, target: &Path) -> anyhow::Result<ScanOutcome> {
+pub fn persist_and_report(
+    result: ScanPipelineResult,
+    target: &Path,
+) -> anyhow::Result<ScanOutcome> {
     if result.outcome == ScanOutcome::Failed {
         for note in &result.coverage_notes {
             eprintln!("[error] {}", note);

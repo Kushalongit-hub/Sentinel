@@ -8,7 +8,8 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest = Path::new(&out_dir).join("embedded_rules.rs");
 
-    let mut contents = String::from("pub fn embedded_rules() -> Vec<(&'static str, &'static str)> {\n");
+    let mut contents =
+        String::from("pub fn embedded_rules() -> Vec<(&'static str, &'static str)> {\n");
     contents.push_str("    vec![\n");
 
     if rules_dir.exists() {

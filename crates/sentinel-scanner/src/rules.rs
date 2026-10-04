@@ -1,10 +1,10 @@
-use std::fs;
-use std::collections::HashSet;
-use std::path::Path;
-use thiserror::Error;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_yaml;
-use regex::Regex;
+use std::collections::HashSet;
+use std::fs;
+use std::path::Path;
+use thiserror::Error;
 
 use sentinel_ast::query_pattern;
 use sentinel_core::{Finding, Severity};
@@ -87,24 +87,45 @@ impl Rule {
             return Err(RuleError::Parse("rule id is empty".to_string()));
         }
         if self.message.trim().is_empty() {
-            return Err(RuleError::Parse(format!("rule {} has empty message", self.id)));
+            return Err(RuleError::Parse(format!(
+                "rule {} has empty message",
+                self.id
+            )));
         }
         if self.languages.is_empty() {
-            return Err(RuleError::Parse(format!("rule {} has no languages", self.id)));
+            return Err(RuleError::Parse(format!(
+                "rule {} has no languages",
+                self.id
+            )));
         }
         match self.severity.to_lowercase().as_str() {
-            s if ["error", "warning", "info", "medium", "high", "low", "critical"].contains(&s) => {}
-            _ => return Err(RuleError::Parse(format!("rule {} has unknown severity: {}", self.id, self.severity))),
+            s if [
+                "error", "warning", "info", "medium", "high", "low", "critical",
+            ]
+            .contains(&s) => {}
+            _ => {
+                return Err(RuleError::Parse(format!(
+                    "rule {} has unknown severity: {}",
+                    self.id, self.severity
+                )))
+            }
         }
         if let Some(mode) = &self.mode {
             match mode.as_str() {
                 "taint" => {}
                 "grep" | "search" => {}
-                _ => return Err(RuleError::Parse(format!("rule {} has unsupported mode: {}", self.id, mode))),
+                _ => {
+                    return Err(RuleError::Parse(format!(
+                        "rule {} has unsupported mode: {}",
+                        self.id, mode
+                    )))
+                }
             }
         }
         if let Some(re) = &self.pattern_regex {
-            Regex::new(re).map_err(|e| RuleError::Parse(format!("rule {} has invalid regex: {}", self.id, e)))?;
+            Regex::new(re).map_err(|e| {
+                RuleError::Parse(format!("rule {} has invalid regex: {}", self.id, e))
+            })?;
         }
         Ok(())
     }
@@ -149,7 +170,7 @@ impl RuleEngine {
         Ok(Self { rules })
     }
 
-    fn compile_and_validate(rules: &mut Vec<Rule>) -> Result<()> {
+    fn compile_and_validate(rules: &mut [Rule]) -> Result<()> {
         for rule in rules.iter_mut() {
             if let Some(re) = &rule.pattern_regex {
                 if let Ok(compiled) = Regex::new(re) {
@@ -174,8 +195,16 @@ impl RuleEngine {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {
-                Self::load_rules_from_dir(path.to_str().ok_or_else(|| RuleError::Parse("invalid path".to_string()))?, rules)?;
-            } else if path.extension().map(|e| e == "yml" || e == "yaml").unwrap_or(false) {
+                Self::load_rules_from_dir(
+                    path.to_str()
+                        .ok_or_else(|| RuleError::Parse("invalid path".to_string()))?,
+                    rules,
+                )?;
+            } else if path
+                .extension()
+                .map(|e| e == "yml" || e == "yaml")
+                .unwrap_or(false)
+            {
                 let contents = fs::read_to_string(&path)?;
                 let rule_set: RuleSet = serde_yaml::from_str(&contents)
                     .map_err(|e| RuleError::Parse(format!("{}: {}", path.display(), e)))?;
@@ -188,7 +217,10 @@ impl RuleEngine {
     pub fn scan(&self, language: &str, source: &str, file_path: &Path) -> Vec<Finding> {
         let mut findings = Vec::new();
         for rule in &self.rules {
-            if !rule.languages.is_empty() && !rule.languages.contains(&language.to_string()) && !rule.languages.contains(&"regex".to_string()) {
+            if !rule.languages.is_empty()
+                && !rule.languages.contains(&language.to_string())
+                && !rule.languages.contains(&"regex".to_string())
+            {
                 continue;
             }
 
@@ -201,9 +233,15 @@ impl RuleEngine {
             }
 
             if self.matches(rule, source) {
-                let line = find_first_line(source, rule.pattern.as_deref().or_else(|| {
-                    rule.patterns.as_ref().and_then(|p| first_pattern(p))
-                }).or_else(|| rule.pattern_either.as_ref().and_then(|p| first_pattern(p))).or(rule.pattern_regex.as_deref()).unwrap_or(""));
+                let line = find_first_line(
+                    source,
+                    rule.pattern
+                        .as_deref()
+                        .or_else(|| rule.patterns.as_ref().and_then(|p| first_pattern(p)))
+                        .or_else(|| rule.pattern_either.as_ref().and_then(|p| first_pattern(p)))
+                        .or(rule.pattern_regex.as_deref())
+                        .unwrap_or(""),
+                );
                 findings.push(Finding {
                     id: format!("{}-{}", rule.id, uuid::Uuid::new_v4().simple()),
                     severity: rule.severity(),
@@ -290,7 +328,12 @@ fn extract_from_entry(entry: &PatternEntry, result: &mut Vec<String>) {
                 result.push(trimmed.to_string());
             }
         }
-        PatternEntry::Complex { pattern, patterns, pattern_either, .. } => {
+        PatternEntry::Complex {
+            pattern,
+            patterns,
+            pattern_either,
+            ..
+        } => {
             if let Some(p) = pattern {
                 let trimmed = p.trim();
                 if !trimmed.is_empty() && !trimmed.contains("$") {
@@ -315,7 +358,11 @@ fn first_pattern(patterns: &[PatternEntry]) -> Option<&str> {
     for p in patterns {
         match p {
             PatternEntry::Simple(s) => return Some(s),
-            PatternEntry::Complex { pattern, pattern_regex, .. } => {
+            PatternEntry::Complex {
+                pattern,
+                pattern_regex,
+                ..
+            } => {
                 if let Some(s) = pattern {
                     return Some(s);
                 }
@@ -345,7 +392,16 @@ fn matches_one(entry: &PatternEntry, source: &str, languages: &[String]) -> bool
                 source.contains(text)
             }
         }
-        PatternEntry::Complex { pattern, patterns, pattern_either, pattern_not, pattern_not_inside, pattern_inside, pattern_regex, .. } => {
+        PatternEntry::Complex {
+            pattern,
+            patterns,
+            pattern_either,
+            pattern_not,
+            pattern_not_inside,
+            pattern_inside,
+            pattern_regex,
+            ..
+        } => {
             let mut has_positive = false;
             if let Some(p) = pattern_regex {
                 has_positive = true;
@@ -440,7 +496,12 @@ fn find_first_line(source: &str, pattern: &str) -> usize {
             return line;
         }
     }
-    source.lines().enumerate().find(|(_, line)| line.contains(pattern)).map(|(i, _)| i + 1).unwrap_or(1)
+    source
+        .lines()
+        .enumerate()
+        .find(|(_, line)| line.contains(pattern))
+        .map(|(i, _)| i + 1)
+        .unwrap_or(1)
 }
 
 #[derive(Debug, Deserialize)]
@@ -450,8 +511,8 @@ pub struct RuleSet {
 
 impl RuleSet {
     pub fn from_yaml(contents: &str) -> Result<Self> {
-        let rule_set: RuleSet = serde_yaml::from_str(contents)
-            .map_err(|e| RuleError::Parse(format!("{}", e)))?;
+        let rule_set: RuleSet =
+            serde_yaml::from_str(contents).map_err(|e| RuleError::Parse(format!("{}", e)))?;
         Ok(rule_set)
     }
 }

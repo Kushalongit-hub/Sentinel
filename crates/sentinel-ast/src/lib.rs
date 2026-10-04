@@ -48,7 +48,17 @@ static SKIP_DIRS: &[&str] = &[
 ];
 
 static SKIP_EXTENSIONS: &[&str] = &[
-    ".o", ".d", ".rmeta", ".rlib", ".bin", ".exe", ".lock", ".a", ".dll", ".so", ".dylib",
+    ".o",
+    ".d",
+    ".rmeta",
+    ".rlib",
+    ".bin",
+    ".exe",
+    ".lock",
+    ".a",
+    ".dll",
+    ".so",
+    ".dylib",
     ".timestamp",
 ];
 
@@ -110,7 +120,9 @@ impl SymbolExtractor {
     pub fn new() -> Self {
         Self {
             python_parser: std::cell::RefCell::new(init_parser(&tree_sitter_python::language())),
-            typescript_parser: std::cell::RefCell::new(init_parser(&tree_sitter_typescript::language_typescript())),
+            typescript_parser: std::cell::RefCell::new(init_parser(
+                &tree_sitter_typescript::language_typescript(),
+            )),
             rust_parser: std::cell::RefCell::new(init_parser(&tree_sitter_rust::language())),
         }
     }

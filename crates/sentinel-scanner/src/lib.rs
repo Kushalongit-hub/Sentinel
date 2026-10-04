@@ -75,7 +75,9 @@ pub fn normalize_finding(raw: &str, scanner: &str) -> CoreResult<Option<Finding>
     match scanner {
         "semgrep" => parse_semgrep(raw),
         "bandit" => parse_bandit(raw),
-        _ => Err(sentinel_core::SentinelError::Parse(format!("unsupported scanner: {}", scanner)).into()),
+        _ => Err(
+            sentinel_core::SentinelError::Parse(format!("unsupported scanner: {}", scanner)),
+        ),
     }
 }
 
@@ -178,7 +180,7 @@ fn parse_bandit(raw: &str) -> CoreResult<Option<Finding>> {
 pub mod rules;
 pub use rules::{RuleEngine, RuleError as RulesError};
 pub mod pipeline;
-pub use pipeline::{run_scan, persist_and_report, ScanOptions, ScanPipelineResult};
+pub use pipeline::{persist_and_report, run_scan, ScanOptions, ScanPipelineResult};
 
 #[cfg(test)]
 mod tests {
@@ -195,7 +197,10 @@ unsafe {
 }
 "#;
         let findings = engine.scan("rust", source, &PathBuf::from("test.rs"));
-        assert!(!findings.is_empty(), "expected findings for unsafe block, got none");
+        assert!(
+            !findings.is_empty(),
+            "expected findings for unsafe block, got none"
+        );
         assert!(findings.iter().any(|f| f.title == "rust-unsafe-usage"));
     }
 
@@ -213,6 +218,9 @@ rules:
 "#;
         let rule_set: crate::rules::RuleSet = serde_yaml::from_str(yaml).unwrap();
         let rule = &rule_set.rules[0];
-        assert!(rule.pattern_either.is_some(), "pattern_either should be Some");
+        assert!(
+            rule.pattern_either.is_some(),
+            "pattern_either should be Some"
+        );
     }
 }
