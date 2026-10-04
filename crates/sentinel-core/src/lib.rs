@@ -5,3 +5,4 @@ pub use error::{Result, SentinelError};
 pub use models::{
     Finding, ScanOutcome, ScanReport, ScannerOutcome, ScannerResult, Severity, ThresholdConfig,
 };
+pub mod security;

@@ -16,10 +16,15 @@ sentinel-scanner = { path = "../sentinel-scanner" }
 sentinel-llm = { path = "../sentinel-llm" }
 sentinel-report = { path = "../sentinel-report" }
 sentinel-db = { path = "../sentinel-db" }
+sentinel-graph = { path = "../sentinel-graph" }
+sentinel-mcp = { path = "../sentinel-mcp" }
+tokio = { version = "1.0", features = ["rt-multi-thread"] }
 colored = "2.1"
 thiserror = "1.0"
 anyhow = "1.0"
 serde_json = "1.0"
+ratatui = { version = "0.30", default-features = false, features = ["crossterm", "layout-cache"] }
+crossterm = "0.29"
 
 [dev-dependencies]
 rusqlite = { version = "0.31", features = ["bundled"] }

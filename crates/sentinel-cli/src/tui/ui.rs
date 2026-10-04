@@ -1,0 +1,433 @@
+use super::app::{safe, App, View};
+use ratatui::{prelude::*, widgets::*};
+const BG: Color = Color::Rgb(12, 18, 30);
+const PANEL: Color = Color::Rgb(18, 27, 43);
+const BORDER: Color = Color::Rgb(45, 61, 82);
+const TEXT: Color = Color::Rgb(222, 232, 241);
+const MUTED: Color = Color::Rgb(133, 154, 177);
+const CYAN: Color = Color::Rgb(91, 211, 229);
+const MINT: Color = Color::Rgb(128, 224, 174);
+const RED: Color = Color::Rgb(248, 129, 140);
+fn panel(title: impl Into<String>) -> Block<'static> {
+    Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(format!(" {} ", title.into()))
+        .border_style(Style::new().fg(BORDER))
+        .style(Style::new().bg(PANEL).fg(TEXT))
+}
+fn paragraph(frame: &mut Frame, area: Rect, title: &str, text: impl Into<String>, scroll: u16) {
+    frame.render_widget(
+        Paragraph::new(text.into())
+            .block(panel(title))
+            .wrap(Wrap { trim: false })
+            .scroll((scroll, 0)),
+        area,
+    );
+}
+fn severity(s: sentinel_core::Severity) -> Color {
+    use sentinel_core::Severity::*;
+    match s {
+        Critical | High => RED,
+        Medium => Color::Rgb(247, 201, 119),
+        Low => CYAN,
+        Info => MUTED,
+    }
+}
+pub fn draw(frame: &mut Frame, app: &App) {
+    let area = frame.area();
+    frame.render_widget(Block::new().style(Style::new().bg(BG).fg(TEXT)), area);
+    if area.width < 65 || area.height < 18 {
+        paragraph(frame,area,"SENTINEL",format!("Enlarge the terminal to at least 65 x 18.\nCurrent: {} x {}\n\nq quits; running operations remain cancellable with Esc.",area.width,area.height),0);
+        return;
+    }
+    let rows = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Min(1),
+        Constraint::Length(3),
+    ])
+    .margin(1)
+    .split(area);
+    let header = Line::from(vec![
+        Span::styled(" SENTINEL ", Style::new().fg(CYAN).bold()),
+        Span::styled(" / SECURITY WORKSPACE   ", Style::new().fg(MUTED)),
+        Span::styled(
+            safe(app.project.to_string_lossy().trim_start_matches(r"\\?\")),
+            Style::new().fg(TEXT),
+        ),
+    ]);
+    frame.render_widget(
+        Paragraph::new(header).block(
+            Block::new()
+                .borders(Borders::BOTTOM)
+                .border_style(Style::new().fg(BORDER)),
+        ),
+        rows[0],
+    );
+    let columns = Layout::horizontal([Constraint::Length(21), Constraint::Min(1)])
+        .spacing(1)
+        .split(rows[1]);
+    navigation(frame, columns[0], app);
+    match app.view {
+        View::Overview => overview(frame, columns[1], app),
+        View::Findings => findings(frame, columns[1], app),
+        View::Rules => rules(frame, columns[1], app),
+        View::Ai => ai(frame, columns[1], app),
+        View::Intelligence => paragraph(
+            frame,
+            columns[1],
+            "Security graph / patch verification",
+            app.intelligence_text.clone(),
+            app.scroll,
+        ),
+    }
+    let indicator = if app.job.is_some() {
+        ["|", "/", "-", "\\"][app.tick % 4]
+    } else {
+        "*"
+    };
+    let footer = vec![
+        Line::from(vec![
+            Span::styled(
+                format!(" {indicator} "),
+                Style::new().fg(if app.status_error { RED } else { MINT }),
+            ),
+            Span::styled(
+                safe(&app.status),
+                Style::new().fg(if app.status_error { RED } else { TEXT }),
+            ),
+        ]),
+        Line::styled(
+            if app.job.is_some() {
+                " Esc cancel | Tab views | ? help | q quit"
+            } else {
+                " Tab views | a audit d diff | g index w verify | ? help | q quit"
+            },
+            Style::new().fg(MUTED),
+        ),
+    ];
+    frame.render_widget(Paragraph::new(footer), rows[2]);
+    if app.help {
+        let modal = centered(area, 82, 25);
+        frame.render_widget(Clear, modal);
+        paragraph(frame,modal,"Keyboard guide","NAVIGATE\n  Tab / Shift+Tab or 1-5     Change workspace\n  j / k or arrows            Select finding / rule; scroll evidence\n  PgUp / PgDn / Home         Scroll detail / reset\n\nSECURITY\n  a Audit   d Git diff   g Index graph   w Verify patch\n  / Filter findings   p Project path   t Severity threshold\n  x External scanners   v Semgrep config   s JSON export   S SARIF export\n\nAI EXPLANATIONS\n  e Explain selected finding   c Explain codebase\n  m Local / NVIDIA NIM / both   i Question   l Local model   n NIM model\n  b Preview identical shared context   Enter Submit explanation\n\n  Esc Close / cancel operation    Ctrl+C / q Quit\n  Exports create new files. Cloud submission sends the previewed context.\n  ? or Esc closes. Arrows / PgUp / PgDn scroll.",app.help_scroll);
+    }
+    if let Some(editor) = &app.editor {
+        let modal = centered(area, 76, 7);
+        frame.render_widget(Clear, modal);
+        paragraph(
+            frame,
+            modal,
+            &format!("Edit {:?}", editor.kind),
+            format!(
+                "{}\n\nEnter save   Esc cancel   Ctrl+U clear",
+                safe(&editor.value)
+                    .chars()
+                    .rev()
+                    .take(modal.width.saturating_sub(3) as usize)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<String>()
+            ),
+            0,
+        );
+        let cursor = editor
+            .value
+            .chars()
+            .count()
+            .min(modal.width.saturating_sub(3) as usize) as u16;
+        frame.set_cursor_position((modal.x + 1 + cursor, modal.y + 1));
+    }
+}
+fn centered(area: Rect, width: u16, height: u16) -> Rect {
+    let width = width.min(area.width.saturating_sub(4));
+    let height = height.min(area.height.saturating_sub(2));
+    Rect::new(
+        area.x + (area.width - width) / 2,
+        area.y + (area.height - height) / 2,
+        width,
+        height,
+    )
+}
+fn navigation(frame: &mut Frame, area: Rect, app: &App) {
+    let rows = Layout::vertical([Constraint::Length(9), Constraint::Min(1)])
+        .spacing(1)
+        .split(area);
+    let items = [
+        "1  Overview",
+        "2  Findings",
+        "3  Rule library",
+        "4  AI explain",
+        "5  Intelligence",
+    ]
+    .iter()
+    .enumerate()
+    .map(|(i, label)| {
+        ListItem::new(*label).style(if i == app.view.index() {
+            Style::new().fg(CYAN).bold()
+        } else {
+            Style::new().fg(MUTED)
+        })
+    })
+    .collect::<Vec<_>>();
+    frame.render_widget(List::new(items).block(panel("WORKSPACE")), rows[0]);
+    let mode = if app.external { "Enabled" } else { "Off" };
+    let state = if app.job.is_some() {
+        "Working"
+    } else {
+        "Ready"
+    };
+    paragraph(frame,rows[1],"SESSION",format!("{state}\n\nExit threshold\n{}\n\nExternal scanners\n{mode}\n\nAI provider\n{}\n\nLocal-first\nDeterministic scans\nAI is advisory",app.threshold,app.provider_name()),0);
+}
+fn overview(frame: &mut Frame, area: Rect, app: &App) {
+    let rows = Layout::vertical([
+        Constraint::Length(5),
+        Constraint::Length(5),
+        Constraint::Min(1),
+    ])
+    .spacing(1)
+    .split(area);
+    let headline = vec![
+        Line::styled(
+            " Know the risk. Follow the evidence.",
+            Style::new().fg(CYAN).bold(),
+        ),
+        Line::from(" A local security workspace for your code and coding agents."),
+        Line::styled(
+            " Audit -> inspect -> trace -> verify",
+            Style::new().fg(MUTED),
+        ),
+    ];
+    frame.render_widget(
+        Paragraph::new(headline).block(panel("PROJECT OVERVIEW")),
+        rows[0],
+    );
+    let cards = Layout::horizontal([Constraint::Ratio(1, 3); 3])
+        .spacing(1)
+        .split(rows[1]);
+    let count = app.report.as_ref().map(|r| r.findings.len()).unwrap_or(0);
+    let high = app
+        .report
+        .as_ref()
+        .map(|r| {
+            r.findings
+                .iter()
+                .filter(|f| f.severity >= sentinel_core::Severity::High)
+                .count()
+        })
+        .unwrap_or(0);
+    let files = app.report.as_ref().map(|r| r.files_scanned).unwrap_or(0);
+    for (index, (label, value, color)) in [
+        ("FINDINGS", count, CYAN),
+        ("HIGH / CRITICAL", high, RED),
+        ("FILES SCANNED", files, MINT),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        frame.render_widget(
+            Paragraph::new(format!("{value}\n{label}"))
+                .style(Style::new().fg(color).bold())
+                .alignment(Alignment::Center)
+                .block(panel("")),
+            cards[index],
+        );
+    }
+    let (coverage,notes)=app.report.as_ref().map(|r|(format!("{:?}",r.outcome),r.coverage_notes.join("\n"))).unwrap_or_else(||("Not scanned".into(),"Press a to audit the project. Results will appear in Findings.\nPress g to build its security graph, then w to verify changes.\n\nUse the AI view to explain the codebase with local, cloud, or both providers. Preview the shared evidence before submitting.".into()));
+    paragraph(
+        frame,
+        rows[2],
+        &format!("Coverage: {coverage}"),
+        format!(
+            "{} embedded rules available\n\n{}",
+            app.rules.len(),
+            safe(&notes)
+        ),
+        app.scroll,
+    );
+}
+fn findings(frame: &mut Frame, area: Rect, app: &App) {
+    let areas = if area.width >= 85 {
+        Layout::horizontal([Constraint::Percentage(52), Constraint::Percentage(48)])
+            .spacing(1)
+            .split(area)
+    } else {
+        Layout::vertical([Constraint::Percentage(48), Constraint::Percentage(52)])
+            .spacing(1)
+            .split(area)
+    };
+    let indexes = app.filtered();
+    let rows = indexes
+        .iter()
+        .filter_map(|i| app.report.as_ref()?.findings.get(*i))
+        .map(|f| {
+            Row::new(vec![
+                Cell::from(f.severity.to_string()).style(Style::new().fg(severity(f.severity))),
+                Cell::from(safe(&f.title)),
+                Cell::from(format!(
+                    "{}:{}",
+                    f.file.strip_prefix(app.root()).unwrap_or(&f.file).display(),
+                    f.line
+                )),
+            ])
+            .height(2)
+        })
+        .collect::<Vec<_>>();
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(9),
+            Constraint::Percentage(45),
+            Constraint::Min(8),
+        ],
+    )
+    .header(
+        Row::new(["SEVERITY", "FINDING", "LOCATION"])
+            .style(Style::new().fg(MUTED))
+            .bottom_margin(1),
+    )
+    .row_highlight_style(Style::new().bg(Color::Rgb(32, 56, 75)).fg(TEXT))
+    .highlight_symbol("> ")
+    .block(panel(format!(
+        "Findings {} / filter: {}",
+        indexes.len(),
+        safe(&app.filter)
+    )));
+    let mut state = TableState::default().with_selected(if indexes.is_empty() {
+        None
+    } else {
+        Some(app.selected)
+    });
+    frame.render_stateful_widget(table, areas[0], &mut state);
+    if let Some(f) = app.selected_finding() {
+        paragraph(frame,areas[1],"Evidence / e explain",format!("{}\n{}  |  confidence {:.0}%\n{}:{}\n\nWHY\n{}\n\nEVIDENCE\n{}\n\nEXECUTION PATH\n{}\n\nFIX\n{}",safe(&f.title),f.severity,f.confidence*100.0,safe(&f.file.display().to_string()),f.line,safe(&f.description),safe(&f.evidence.join("\n")),safe(&f.execution_path.join("\n")),safe(&f.recommendation)),app.scroll);
+    } else {
+        paragraph(frame,areas[1],"Evidence","No finding selected.\n\nRun an audit, or clear your filter with Esc. A clean list only establishes what the reported coverage supports.",0);
+    }
+}
+fn rules(frame: &mut Frame, area: Rect, app: &App) {
+    let areas = Layout::horizontal([Constraint::Percentage(45), Constraint::Percentage(55)])
+        .spacing(1)
+        .split(area);
+    let items = app
+        .rules
+        .iter()
+        .map(|r| ListItem::new(format!("{}  {}", r.severity, safe(&r.id))))
+        .collect::<Vec<_>>();
+    let mut state = ListState::default().with_selected(Some(app.rule_selected));
+    frame.render_stateful_widget(
+        List::new(items)
+            .block(panel(format!("Embedded rules ({})", app.rules.len())))
+            .highlight_style(Style::new().bg(Color::Rgb(32, 56, 75)).fg(CYAN))
+            .highlight_symbol("> "),
+        areas[0],
+        &mut state,
+    );
+    if let Some(rule) = app.rules.get(app.rule_selected) {
+        paragraph(frame,areas[1],"Rule details",format!("{}\n\nSeverity: {}\nLanguages: {}\nMode: {}\n\n{}\n\nPATTERN\n{}\n\nRules run deterministically. Applicability alone is not a finding.",safe(&rule.id),rule.severity,rule.languages.join(", "),rule.mode.as_deref().unwrap_or("pattern"),safe(&rule.message),safe(&serde_json::to_string_pretty(rule).unwrap_or_default())),app.scroll);
+    }
+}
+fn ai(frame: &mut Frame, area: Rect, app: &App) {
+    let rows = Layout::vertical([Constraint::Length(8), Constraint::Min(1)])
+        .spacing(1)
+        .split(area);
+    paragraph(
+        frame,
+        rows[0],
+        "Shared context / m provider / b preview / Enter submit",
+        format!(
+            "Provider: {}   Target: {}\nLocal: {}   NVIDIA NIM: {}\n\nQuestion: {}",
+            app.provider_name(),
+            if app.ai_finding.is_some() {
+                "Selected finding"
+            } else {
+                "Codebase"
+            },
+            safe(&app.local_model),
+            if app.nim_model.is_empty() {
+                "Set with n or SENTINEL_NIM_MODEL".into()
+            } else {
+                safe(&app.nim_model)
+            },
+            safe(&app.question)
+        ),
+        0,
+    );
+    paragraph(
+        frame,
+        rows[1],
+        "Explanation / advisory",
+        app.ai_text.clone(),
+        app.scroll,
+    );
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use ratatui::{backend::TestBackend, Terminal};
+    #[test]
+    fn workspace_draws_each_view_and_resizes_without_panics() {
+        let mut app = App::new(std::env::current_dir().unwrap()).unwrap();
+        for (width, height) in [(120, 38), (80, 24), (65, 18), (40, 12)] {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            for view in [
+                View::Overview,
+                View::Findings,
+                View::Rules,
+                View::Ai,
+                View::Intelligence,
+            ] {
+                app.view = view;
+                terminal.draw(|f| draw(f, &app)).unwrap();
+                let text = terminal
+                    .backend()
+                    .buffer()
+                    .content
+                    .iter()
+                    .map(|c| c.symbol())
+                    .collect::<String>();
+                assert!(text.contains("SENTINEL"));
+            }
+        }
+        app.project = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        app.view = View::Overview;
+        let mut terminal = Terminal::new(TestBackend::new(120, 38)).unwrap();
+        terminal.draw(|f| draw(f, &app)).unwrap();
+        if let Ok(path) = std::env::var("SENTINEL_TUI_SNAPSHOT") {
+            let buffer = terminal.backend().buffer();
+            let cells=buffer.content.iter().map(|c|serde_json::json!({"symbol":c.symbol(),"fg":format!("{:?}",c.fg),"bg":format!("{:?}",c.bg),"bold":c.modifier.contains(Modifier::BOLD)})).collect::<Vec<_>>();
+            std::fs::write(
+                path,
+                serde_json::to_vec(&serde_json::json!({"width":120,"height":38,"cells":cells}))
+                    .unwrap(),
+            )
+            .unwrap();
+        }
+    }
+    #[test]
+    fn keyboard_selection_provider_and_editor_sanitize_paste() {
+        let mut app = App::new(std::env::current_dir().unwrap()).unwrap();
+        assert!(!app.key(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE)));
+        assert_eq!(app.view, View::Ai);
+        app.key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+        assert_eq!(app.provider_name(), "nim");
+        app.key(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE));
+        app.key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
+        assert_eq!(app.help_scroll, 8);
+        app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(!app.help);
+        app.key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
+        app.editor.as_mut().unwrap().value.clear();
+        app.paste("question\x1b\n");
+        assert_eq!(app.editor.as_ref().unwrap().value, "question");
+        app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(app.question, "question");
+        assert!(app.key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE)));
+    }
+}

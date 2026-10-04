@@ -119,7 +119,7 @@ impl SubprocessRunner {
                 } else {
                     "timeout exceeded"
                 });
-                terminate(&mut child);
+                terminate_process_tree(&mut child);
                 break child
                     .wait()
                     .map_err(|e| ScannerError::Execution(e.to_string()))?;
@@ -147,14 +147,14 @@ impl SubprocessRunner {
         let out = match read(stdout) {
             Ok(bytes) => bytes,
             Err(e) => {
-                terminate(&mut child);
+                terminate_process_tree(&mut child);
                 return Err(e);
             }
         };
         let err = match read(stderr) {
             Ok(bytes) => bytes,
             Err(e) => {
-                terminate(&mut child);
+                terminate_process_tree(&mut child);
                 return Err(e);
             }
         };
@@ -220,7 +220,9 @@ impl SubprocessRunner {
         Self::run_command(&mut command, timeout, 8 * 1024 * 1024)
     }
 }
-fn terminate(child: &mut std::process::Child) {
+/// Terminate and reap an owned child and its process group/tree.
+/// On Unix the caller must spawn the child with `process_group(0)`.
+pub fn terminate_process_tree(child: &mut std::process::Child) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -433,3 +435,4 @@ mod subprocess_tests {
         assert!(result.unwrap_err().to_string().contains("output limit"));
     }
 }
+pub mod git;

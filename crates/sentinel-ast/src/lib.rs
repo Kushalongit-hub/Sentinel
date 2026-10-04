@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 pub mod ast_query;
+pub mod security;
 
 pub use ast_query::{
     compile_pattern, match_context, match_pattern, parse_tree, pattern_spans, query_pattern,
@@ -63,6 +64,23 @@ static SKIP_EXTENSIONS: &[&str] = &[
     ".so",
     ".dylib",
     ".timestamp",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".ico",
+    ".pdf",
+    ".zip",
+    ".gz",
+    ".7z",
+    ".db",
+    ".sqlite",
+    ".sqlite3",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
 ];
 
 pub fn walk(path: &str) -> Result<Vec<FileEntry>> {
@@ -92,9 +110,16 @@ pub fn walk(path: &str) -> Result<Vec<FileEntry>> {
     Ok(entries)
 }
 
-fn should_skip(path: &std::path::Path) -> bool {
+/// Shared source-selection exclusions for generated directories and known binary artifacts.
+pub fn should_skip(path: &std::path::Path) -> bool {
+    if path
+        .file_name()
+        .is_some_and(|n| n.to_string_lossy().starts_with(".sentinel.db"))
+    {
+        return true;
+    }
     if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-        if SKIP_EXTENSIONS.contains(&(".".to_string() + ext).as_str()) {
+        if SKIP_EXTENSIONS.contains(&(".".to_string() + &ext.to_ascii_lowercase()).as_str()) {
             return true;
         }
     }

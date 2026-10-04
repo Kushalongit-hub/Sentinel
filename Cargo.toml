@@ -8,6 +8,8 @@ members = [
     "crates/sentinel-llm",
     "crates/sentinel-report",
     "crates/sentinel-db",
+    "crates/sentinel-graph",
+    "crates/sentinel-mcp",
 ]
 resolver = "2"
 

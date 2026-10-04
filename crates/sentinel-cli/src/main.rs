@@ -133,7 +133,43 @@ enum Commands {
         ai: AiArgs,
     },
     Rules,
-    Tui,
+    /// Incrementally build the persistent repository security graph.
+    Index {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    /// Show statistics from the latest repository index.
+    IndexStatus {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    /// Serve repository-bound security tools to an MCP-compatible agent over stdio.
+    Mcp {
+        #[arg(long, default_value = ".")]
+        repository: PathBuf,
+    },
+    /// Verify a patch against a saved baseline or Git HEAD.
+    Verify {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        base: Option<String>,
+    },
+    Baseline {
+        #[command(subcommand)]
+        command: BaselineCommand,
+    },
+    Tui {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+}
+#[derive(Subcommand)]
+enum BaselineCommand {
+    Create {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
 }
 fn main() {
     let cli = Cli::parse();
@@ -153,7 +189,46 @@ fn main() {
         } => explain::explain_with_ai(finding_id, project, db, ai),
         Commands::ExplainCodebase { path, db, ai } => explain::explain_codebase(path, db, ai),
         Commands::Rules => rules::rules(),
-        Commands::Tui => tui::run(),
+        Commands::Index { path } => (|| -> anyhow::Result<i32> {
+            let stats = sentinel_graph::Engine::open(path)?.index()?;
+            println!("{}", serde_json::to_string_pretty(&stats)?);
+            Ok(if stats.complete { 0 } else { 2 })
+        })(),
+        Commands::IndexStatus { path } => (|| -> anyhow::Result<i32> {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&sentinel_graph::Engine::open(path)?.status()?)?
+            );
+            Ok(0)
+        })(),
+        Commands::Mcp { repository } => (|| -> anyhow::Result<i32> {
+            tokio::runtime::Runtime::new()?.block_on(sentinel_mcp::serve(repository))?;
+            Ok(0)
+        })(),
+        Commands::Verify { path, base } => (|| -> anyhow::Result<i32> {
+            let report = sentinel_graph::Engine::open(path)?.verify_patch(base.as_deref())?;
+            let code = if !report.comparison.complete {
+                2
+            } else if report.verdict == sentinel_graph::verification::Verdict::Pass {
+                0
+            } else {
+                1
+            };
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            Ok(code)
+        })(),
+        Commands::Baseline {
+            command: BaselineCommand::Create { path },
+        } => (|| -> anyhow::Result<i32> {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(
+                    &sentinel_graph::Engine::open(path)?.create_baseline()?
+                )?
+            );
+            Ok(0)
+        })(),
+        Commands::Tui { path } => tui::run(path),
     };
     let code = match result {
         Ok(code) => code,

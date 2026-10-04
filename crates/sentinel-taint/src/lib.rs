@@ -437,3 +437,4 @@ mod tests {
         assert_eq!(hits("exec('user_input');", vec![]), 0);
     }
 }
+pub mod interprocedural;

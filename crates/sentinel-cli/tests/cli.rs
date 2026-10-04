@@ -318,6 +318,225 @@ fn tui_exits_on_eof_and_survives_findings() {
     assert!(out.status.success());
     assert!(String::from_utf8_lossy(&out.stdout).contains("Exiting."));
 }
+
+#[test]
+fn mcp_stdio_indexes_traces_retrieves_and_rejects_scope_escape() {
+    use std::io::{BufRead, BufReader};
+    let f = Fixture::new();
+    f.repo();
+    f.write("routes.py", "from service import create_user\ndef handler(request):\n    return create_user(request.args['name'])\n");
+    f.write("service.py", "from repository import insert_user\ndef create_user(value):\n    return insert_user(value)\n");
+    f.write(
+        "repository.py",
+        "def insert_user(value):\n    cursor.execute('SELECT ' + value)\n",
+    );
+    f.git(&["add", "."]);
+    f.git(&["commit", "-m", "fixture"]);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_sentinel"))
+        .current_dir(&f.0)
+        .args(["mcp", "--repository", "."])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            if sender.send(line.unwrap()).is_err() {
+                break;
+            }
+        }
+    });
+    let mut id = 0;
+    let mut request = |method: &str, params: serde_json::Value| {
+        if method.starts_with("notifications/") {
+            writeln!(
+                input,
+                "{}",
+                serde_json::json!({"jsonrpc":"2.0","method":method,"params":params})
+            )
+            .unwrap();
+            return serde_json::Value::Null;
+        }
+        id += 1;
+        writeln!(
+            input,
+            "{}",
+            serde_json::json!({"jsonrpc":"2.0","id":id,"method":method,"params":params})
+        )
+        .unwrap();
+        loop {
+            let line = receiver
+                .recv_timeout(Duration::from_secs(20))
+                .unwrap_or_else(|e| {
+                    let _ = child.kill();
+                    panic!("MCP request timed out: {e}");
+                });
+            let json: serde_json::Value =
+                serde_json::from_str(&line).expect("MCP stdout must contain JSON only");
+            if json["id"] == id {
+                return json;
+            }
+        }
+    };
+    let initialized = request(
+        "initialize",
+        serde_json::json!({"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"sentinel-test","version":"1"}}),
+    );
+    assert!(initialized.get("result").is_some(), "{initialized}");
+    request("notifications/initialized", serde_json::json!({}));
+    let tools = request("tools/list", serde_json::json!({}));
+    assert!(
+        tools["result"]["tools"].as_array().unwrap().len() == 10,
+        "{tools}"
+    );
+    assert!(tools["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|tool| tool["inputSchema"]["type"] == "object"));
+    let indexed = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_index_project","arguments":{"path":"."}}),
+    );
+    assert_eq!(
+        indexed["result"]["structuredContent"]["files_indexed"], 3,
+        "{indexed}"
+    );
+    let context = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_get_security_context","arguments":{"repository":".","target":"create_user","max_items":40}}),
+    );
+    assert!(!context["result"]["structuredContent"]["selected_items"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    let trace = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_trace_taint","arguments":{"repository":".","target":"create_user"}}),
+    );
+    assert_eq!(
+        trace["result"]["structuredContent"]["paths"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "{trace}"
+    );
+    let scan = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_scan_file","arguments":{"path":"repository.py"}}),
+    );
+    let finding = scan["result"]["structuredContent"]["report"]["findings"][0]["id"]
+        .as_str()
+        .unwrap();
+    let evidence = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_explain_finding","arguments":{"finding_id":finding}}),
+    );
+    assert!(
+        evidence["result"]["structuredContent"]["why"].is_string(),
+        "{evidence}"
+    );
+    let outside = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_get_security_context","arguments":{"repository":"..","target":"create_user"}}),
+    );
+    assert_eq!(outside["result"]["isError"], true);
+    let diff = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_scan_diff","arguments":{"repository":"."}}),
+    );
+    assert!(
+        diff["result"]["structuredContent"]["new_findings"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "{diff}"
+    );
+    for name in [
+        "sentinel_find_symbol",
+        "sentinel_get_callers",
+        "sentinel_get_callees",
+    ] {
+        let args = if name == "sentinel_find_symbol" {
+            serde_json::json!({"repository":".","query":"create_user"})
+        } else {
+            serde_json::json!({"repository":".","target":"create_user"})
+        };
+        let result = request(
+            "tools/call",
+            serde_json::json!({"name":name,"arguments":args}),
+        );
+        assert!(
+            result["result"]["structuredContent"]["symbols"].is_array(),
+            "{result}"
+        );
+    }
+    let verified = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_verify_patch","arguments":{"repository":"."}}),
+    );
+    assert_eq!(
+        verified["result"]["structuredContent"]["verdict"], "PASS",
+        "{verified}"
+    );
+    std::fs::write(
+        f.0.join("repository.py"),
+        "def insert_user(value):\n    cursor.execute('SELECT ?', (value,))\n",
+    )
+    .unwrap();
+    let fixed = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_verify_patch","arguments":{"repository":"."}}),
+    );
+    assert_eq!(
+        fixed["result"]["structuredContent"]["verdict"], "PASS",
+        "{fixed}"
+    );
+    assert!(!fixed["result"]["structuredContent"]["resolved_findings"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    std::fs::write(
+        f.0.join("repository.py"),
+        "def insert_user(value):\n    subprocess.run(value, shell=True)\n",
+    )
+    .unwrap();
+    let regressed = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_verify_patch","arguments":{"repository":"."}}),
+    );
+    assert_eq!(
+        regressed["result"]["structuredContent"]["verdict"], "FAIL",
+        "{regressed}"
+    );
+    assert!(
+        !regressed["result"]["structuredContent"]["changed_taint_paths"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let bad_limit = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_trace_taint","arguments":{"repository":".","target":"create_user","max_paths":0}}),
+    );
+    assert_eq!(bad_limit["result"]["isError"], true, "{bad_limit}");
+    drop(request);
+    drop(input);
+    let deadline = Instant::now();
+    while child.try_wait().unwrap().is_none() {
+        if deadline.elapsed() > Duration::from_secs(5) {
+            let _ = child.kill();
+            panic!("MCP did not shut down on stdin EOF");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    reader.join().unwrap();
+}
 #[test]
 fn rules_list_actual_catalog_without_creating_database() {
     let f = Fixture::new();

@@ -1,0 +1,16 @@
+[package]
+name = "sentinel-graph"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+sentinel-core = { path = "../sentinel-core" }
+sentinel-ast = { path = "../sentinel-ast" }
+sentinel-taint = { path = "../sentinel-taint" }
+sentinel-scanner = { path = "../sentinel-scanner" }
+sentinel-db = { path = "../sentinel-db" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rusqlite = "0.31"
+anyhow = "1.0"

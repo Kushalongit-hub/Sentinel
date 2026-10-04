@@ -1,0 +1,14 @@
+[package]
+name = "sentinel-mcp"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+sentinel-graph = { path = "../sentinel-graph" }
+sentinel-core = { path = "../sentinel-core" }
+rmcp = { version = "3.5", default-features = false, features = ["server", "macros", "transport-io"] }
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"

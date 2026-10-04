@@ -1,6 +1,8 @@
 # Sentinel
 
-An offline-first static code auditor for Rust, Python, JavaScript, and TypeScript.
+A local-first security intelligence engine for humans and AI coding agents.
+Audit code, follow cross-function input flows, retrieve ranked security context,
+and verify patches through a persistent graph, CLI, TUI, or stdio MCP.
 The default scan uses 19 embedded rules and requires no external scanner or network.
 Optional Semgrep/Bandit scans and AI explanations must be requested explicitly.
 Explain findings or the codebase with local Ollama, NVIDIA NIM, or both models
@@ -12,6 +14,9 @@ a successful scan is not a guarantee that a project has no vulnerabilities.
 
 ## Contents
 
+- [Terminal workspace](#terminal-workspace)
+- [Security intelligence and agents](#security-intelligence-and-agents)
+- [Patch verification and baselines](#patch-verification-and-baselines)
 - [Build and run](#build-and-run)
 - [Changed-file scans](#changed-file-scans)
 - [Optional external scanners](#optional-external-scanners)
@@ -34,7 +39,10 @@ sentinel audit /path/to/project --format json
 sentinel audit /path/to/project --format sarif --threshold high
 sentinel audit /path/to/file.rs
 sentinel rules
-sentinel tui
+sentinel tui /path/to/project
+sentinel index /path/to/project
+sentinel verify /path/to/project
+sentinel mcp --repository /path/to/project
 ```
 
 `--format` accepts terminal, json, or sarif. JSON and SARIF go to stdout without
@@ -267,7 +275,7 @@ patterns, invalid regexes, duplicate IDs, and missing positive selectors are
 rejected with diagnostics. Taint rules require nonempty supported sources/sinks;
 they are never silently discarded.
 
-Taint analysis handles identifier assignments, lexical shadowing, captured
+Embedded-rule taint analysis handles identifier assignments, lexical shadowing, captured
 bindings, conservative branch joins, and loop fixed points. Sanitizers affect
 only the expression they transform. Function-parameter audit rules use the
 explicit `@parameter` source. Analysis is approximate: it does not resolve module
@@ -496,6 +504,7 @@ erDiagram
 
 The findings table also stores confidence, description, execution path, affected
 components, and recommendation; they are omitted from the diagram for clarity.
+Schema v4 adds graph/index and baseline tables to this same store, as shown below.
 Migration preserves legacy lifecycle metadata when present. A failed scan write
 rolls back its scan record, finding updates, snapshots, and resolution changes.
 
@@ -553,3 +562,191 @@ On Windows GNU toolchains, ensure the MinGW bin directory is on PATH so Cargo
 can find gcc/dlltool and their libraries. The installed MinGW directory used
 for local verification was C:\msys64\mingw64\bin. No machine-specific compiler
 path is committed to the project.
+
+## Terminal workspace
+
+```sh
+sentinel tui .
+```
+
+![Sentinel terminal workspace](docs/sentinel-tui.png)
+
+The fullscreen Ratatui interface provides five workspaces: Overview, Findings,
+Rule library, AI explain, and Intelligence. Findings pair a selectable severity
+list with location, confidence, execution path, evidence and remediation. The
+Intelligence view shows persistent index statistics and patch verdicts. Operations
+run in cancellable background processes, keeping navigation responsive.
+
+| Key | Action |
+| --- | --- |
+| Tab / Shift+Tab / 1-5 | Switch views |
+| a / d | Audit project / scan Git changes |
+| g / w | Index security graph / verify patch |
+| j / k / arrows | Select finding or rule / scroll text |
+| PageUp / PageDown / Home | Scroll evidence / reset |
+| / / p / t | Filter findings / project path / exit threshold |
+| x / v | Toggle external scanners / edit Semgrep config |
+| s / S | Export JSON / SARIF to a new file |
+| e / c | Explain selected finding / explain codebase |
+| m / i / l / n | Provider / question / local model / NIM model |
+| b / Enter in AI view | Preview shared context / request explanation |
+| ? / Esc / q | Help / close or cancel / quit |
+
+Local, NIM, and both are explicit choices with identical shared evidence in both
+mode and no automatic fallback. AI output remains advisory. Resize support includes
+an explicit compact-terminal message below 65 columns or 18 rows. Raw mode and the
+alternate screen restore on exit/errors/panics. Redirected input/output retains
+the simple line interface. The image is rendered from an actual styled test buffer.
+
+## Security intelligence and agents
+
+```sh
+sentinel index .
+sentinel index-status .
+sentinel mcp --repository .
+```
+
+Indexing persists definitions, stable symbol IDs, imports, resolved/unresolved
+calls, sources, sinks, sanitizers, guards and flow evidence in `.sentinel.db`.
+Changed files are reparsed; unchanged files reuse stored AST flow IR. All content
+is still hashed and relationships recomputed to detect cross-file changes.
+Deleted/invalid files invalidate stale graph entries. Statistics include timings,
+changed/unchanged counts and explicit coverage notes. `index` exits 2 when partial.
+
+Existing `audit` and `diff` retain their embedded per-file pipeline; `verify`
+and the MCP service add persisted repository graph and interprocedural analysis.
+
+The official Rust MCP SDK exposes ten repository-bound tools: index_project,
+scan_file, scan_diff, get_security_context, trace_taint, explain_finding,
+verify_patch, find_symbol, get_callers and get_callees (all prefixed `sentinel_`).
+MCP stdout contains JSON-RPC only. No MCP security tool calls an LLM or executes an
+agent-provided shell command. The agent edits code and asks Sentinel for evidence.
+
+[Agent integration](docs/agent-integration.md) provides Codex, Claude Code,
+Kilo CLI and OpenCode configuration examples, tool contracts and a before/after
+editing workflow. [Implementation and boundaries](docs/security-intelligence-mvp.md)
+describes supported constructs, persistent data, resource budgets and validation.
+
+```mermaid
+flowchart LR
+    Human["Human / CI"] --> CLI["CLI and Ratatui TUI"]
+    Agent["Codex / Claude / Kilo / OpenCode"] --> MCP["sentinel-mcp<br/>official rmcp SDK / stdio"]
+    CLI --> Graph["sentinel-graph<br/>index / context / evidence / verification"]
+    MCP --> Graph
+    Graph --> AST["sentinel-ast<br/>Tree-sitter definitions, imports, compact IR"]
+    Graph --> Trace["sentinel-taint<br/>bounded parameter / return propagation"]
+    Graph --> Rules["sentinel-scanner<br/>embedded rules and bounded Git reads"]
+    Graph --> DB[("sentinel-db<br/>SQLite schema v4")]
+    CLI -. "optional explanations" .-> AI["sentinel-llm<br/>local / NVIDIA NIM / both"]
+    classDef engine fill:#dbeafe,stroke:#2563eb,color:#172554;
+    classDef optional fill:#fef3c7,stroke:#d97706,color:#78350f;
+    class Graph,AST,Trace,Rules,DB engine;
+    class AI optional;
+```
+
+Security context ranks exact targets, same-file symbols, direct callers/callees,
+imported modules, two-hop dependencies, source/sink/guard annotations, findings,
+applicable rules, flow paths and changed files. Each item has a relevance score
+and selection reasons; bounded outputs report omissions. A rule's applicability
+or a guard's presence does not prove a vulnerability or protection.
+
+Repository flow supports Python, JS/TS/TSX and basic Rust AST constructs. It
+propagates arguments/returns across unambiguous local/imported calls; dynamic
+receivers remain unresolved. Recognized SQL, shell, XSS and path sinks yield
+location-based evidence, sanitizer steps, guard annotations and confidence.
+It complements embedded-rule taint; it does not provide compiler-level soundness.
+Unsupported constructs, parse failures and exhausted budgets affect coverage.
+
+```mermaid
+erDiagram
+    projects ||--o{ files : indexes
+    files ||--o{ symbols : defines
+    symbols ||--o{ symbol_edges : relates
+    symbols ||--o{ security_annotations : annotates
+    projects ||--|| index_metadata : records
+    projects ||--o| security_baselines : freezes
+    projects ||--o{ baseline_findings : tracks
+    files {
+        TEXT project_id PK
+        TEXT path PK
+        TEXT language
+        TEXT content_hash
+        TEXT payload "cached AST flow IR"
+    }
+    symbols {
+        TEXT id PK
+        TEXT project_id
+        TEXT file
+        TEXT qualified_name
+        TEXT kind
+        INTEGER start_line
+        INTEGER end_line
+        TEXT content_hash
+    }
+    symbol_edges {
+        TEXT from_id
+        TEXT to_id
+        TEXT kind "CALLS / FLOWS_TO / IMPORTS / others"
+        INTEGER resolved
+        TEXT payload "location and name evidence"
+    }
+    security_baselines {
+        TEXT project_id PK
+        TEXT payload "frozen findings, keys and paths"
+        TEXT created_at
+    }
+    baseline_findings {
+        TEXT project_id PK
+        TEXT fingerprint PK
+        TEXT rule
+        TEXT location
+        TEXT status
+        TEXT first_seen
+        TEXT last_seen
+    }
+```
+
+## Patch verification and baselines
+
+```sh
+# Freeze current findings as accepted debt; requires complete analysis.
+sentinel baseline create .
+
+# Prefer the saved baseline; otherwise compare against HEAD.
+sentinel verify .
+
+# Explicit immutable Git base, without checkout or executing project code.
+sentinel verify . --base main
+```
+
+Verification returns JSON with NEW, RESOLVED, UNCHANGED and REGRESSED classifications
+(as named finding arrays), changed flow paths, reasons, coverage and PASS/WARN/FAIL.
+Git comparison analyzes changed files and call neighbors against a validated commit;
+saved baselines compare the whole eligible project. Existing debt alone does not
+fail. A complete verification records fixes so later reintroductions are regressed.
+
+```mermaid
+flowchart TD
+    Start["Verify working tree"] --> Base{"Saved baseline<br/>and no explicit base?"}
+    Base -->|yes| Saved["Compare full project with accepted debt"]
+    Base -->|no| Git["Read immutable Git base<br/>compare changes and neighbors"]
+    Saved --> Classify["Classify findings and changed taint paths"]
+    Git --> Classify
+    Classify --> Dangerous{"New / regressed high-confidence severity<br/>or new dangerous path?"}
+    Dangerous -->|yes| Fail["FAIL with exact evidence"]
+    Dangerous -->|no| Review{"Incomplete / unclassified / low-confidence<br/>or lower-severity new finding?"}
+    Review -->|yes| Warn["WARN / review required"]
+    Review -->|no| Pass["PASS within supported scope"]
+```
+
+FAIL covers new/regressed high/critical findings with confidence at least 0.5,
+or new medium-confidence dangerous paths. WARN covers lower severity, low
+confidence and incomplete comparison. Incomplete evidence never returns PASS
+and never establishes resolution. Verify exits 0 for complete PASS, 1 for complete
+WARN/FAIL and 2 for incomplete analysis/errors (even when observed evidence fails).
+
+Comparison identities ignore line shifts but include file paths and normalized
+triggering source; semantic rewrites/renames can appear as new occurrences.
+Baselines are tied to the canonical local repository root. This MVP is bounded
+security evidence for review and controlled pilots, not an independently validated
+proof that code is safe.

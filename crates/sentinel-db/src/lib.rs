@@ -66,13 +66,19 @@ impl SentinelDb {
         let version: i64 = self
             .conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version > 2 {
+        if version > 4 {
             return Err(DbError::Migration(format!(
-                "database version {version} is newer than supported version 2"
+                "database version {version} is newer than supported version 4"
             )));
         }
-        if version == 2 {
+        if version == 4 {
             return Ok(());
+        }
+        if version == 3 {
+            return self.migrate_baseline();
+        }
+        if version == 2 {
+            return self.migrate_graph();
         }
         let tx = self.conn.unchecked_transaction()?;
         let exists: bool = tx.query_row(
@@ -147,7 +153,48 @@ impl SentinelDb {
         }
         tx.execute_batch("PRAGMA user_version = 2;")?;
         tx.commit()?;
+        self.migrate_graph()
+    }
+    fn migrate_graph(&self) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,root TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS files(project_id TEXT NOT NULL,path TEXT NOT NULL,language TEXT NOT NULL,content_hash TEXT NOT NULL,payload TEXT NOT NULL,indexed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(project_id,path));
+CREATE TABLE IF NOT EXISTS symbols(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,file TEXT NOT NULL,name TEXT NOT NULL,qualified_name TEXT NOT NULL,kind TEXT NOT NULL,start_line INTEGER NOT NULL,end_line INTEGER NOT NULL,language TEXT NOT NULL,content_hash TEXT NOT NULL,payload TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_symbols_project_name ON symbols(project_id,name);
+CREATE TABLE IF NOT EXISTS symbol_edges(project_id TEXT NOT NULL,owner_file TEXT NOT NULL,from_id TEXT NOT NULL,to_id TEXT NOT NULL,kind TEXT NOT NULL,line INTEGER NOT NULL,name TEXT NOT NULL,resolved INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(project_id,from_id,to_id,kind,line,name));
+CREATE INDEX IF NOT EXISTS idx_edges_to ON symbol_edges(project_id,to_id);
+CREATE TABLE IF NOT EXISTS security_annotations(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,file TEXT NOT NULL,owner TEXT NOT NULL,kind TEXT NOT NULL,category TEXT NOT NULL,payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS index_metadata(project_id TEXT PRIMARY KEY,payload TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+PRAGMA user_version=3;")?;
+        tx.commit()?;
+        self.migrate_baseline()
+    }
+    fn migrate_baseline(&self) -> Result<()> {
+        self.conn.execute_batch("BEGIN IMMEDIATE;
+CREATE TABLE IF NOT EXISTS security_baselines(project_id TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS baseline_findings(project_id TEXT NOT NULL,fingerprint TEXT NOT NULL,rule TEXT NOT NULL,location TEXT NOT NULL,status TEXT NOT NULL,first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(project_id,fingerprint));
+PRAGMA user_version=4; COMMIT;")?;
         Ok(())
+    }
+    /// Access the shared SQLite store for composable transactional repository services.
+    /// Schema changes must remain in this crate's versioned migrations.
+    pub fn connection(&self) -> &rusqlite::Connection {
+        &self.conn
+    }
+    /// Return current or historical finding rows without creating a database.
+    pub fn list_findings(&self, active_only: bool) -> Result<Vec<Finding>> {
+        let suffix = if active_only {
+            " WHERE resolved_at IS NULL"
+        } else {
+            ""
+        };
+        let mut stmt=self.conn.prepare(&format!("SELECT id,severity,confidence,category,file,line,title,description,execution_path,affected_components,evidence,recommendation FROM findings{suffix}"))?;
+        let mut rows = stmt.query([])?;
+        let mut results = vec![];
+        while let Some(row) = rows.next()? {
+            results.push(read_finding(row)?);
+        }
+        Ok(results)
     }
     pub fn insert_finding(&self, finding: &Finding, scan_id: &str) -> Result<()> {
         write_finding(&self.conn, finding, scan_id)
@@ -364,5 +411,23 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1);
+    }
+    #[test]
+    fn version_three_upgrade_preserves_graph_and_rejects_future_versions() {
+        let db = SentinelDb::new_in_memory().unwrap();
+        db.conn.execute_batch("INSERT INTO projects(id,root) VALUES ('p','root'); PRAGMA user_version=3; DROP TABLE security_baselines; DROP TABLE baseline_findings;").unwrap();
+        db.migrate().unwrap();
+        let root: String = db
+            .conn
+            .query_row("SELECT root FROM projects WHERE id='p'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(root, "root");
+        let version: i64 = db
+            .conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 4);
+        db.conn.execute_batch("PRAGMA user_version=5;").unwrap();
+        assert!(db.migrate().is_err());
     }
 }
