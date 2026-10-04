@@ -217,6 +217,10 @@ fn walk_with_scope(
                     }
                 }
             }
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                walk_with_scope(source, &child, contexts, engine, findings, rule);
+            }
         }
         "call_expression" => {
             if let Some(_func_node) = node.child_by_field_name("function") {
