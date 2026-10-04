@@ -24,7 +24,7 @@ pub fn query_pattern(source: &[u8], language: &str, pattern: &str) -> Result<boo
                 None => return Err(AstError::Parse("parse failed".to_string())),
             };
             let root = tree.root_node();
-            search_nodes(source, &root, &node_kinds, &parts)
+            search_nodes(source, &root, node_kinds, &parts)
         }),
         "typescript" | "javascript" => TYPESCRIPT_PARSER.with(|parser| {
             let mut binding = parser.borrow_mut();
@@ -37,7 +37,7 @@ pub fn query_pattern(source: &[u8], language: &str, pattern: &str) -> Result<boo
                 None => return Err(AstError::Parse("parse failed".to_string())),
             };
             let root = tree.root_node();
-            search_nodes(source, &root, &node_kinds, &parts)
+            search_nodes(source, &root, node_kinds, &parts)
         }),
         "rust" => RUST_PARSER.with(|parser| {
             let mut binding = parser.borrow_mut();
@@ -50,7 +50,7 @@ pub fn query_pattern(source: &[u8], language: &str, pattern: &str) -> Result<boo
                 None => return Err(AstError::Parse("parse failed".to_string())),
             };
             let root = tree.root_node();
-            search_nodes(source, &root, &node_kinds, &parts)
+            search_nodes(source, &root, node_kinds, &parts)
         }),
         _ => Ok(false),
     }

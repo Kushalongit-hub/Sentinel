@@ -62,7 +62,7 @@ pub enum PatternEntry {
         #[serde(rename = "focus-metavariable")]
         focus_metavariable: Option<String>,
         #[serde(rename = "metavariable-pattern")]
-        metavariable_pattern: Option<serde_yaml::Value>,
+        metavariable_pattern: Option<Box<serde_yaml::Value>>,
         #[serde(rename = "pattern-regex")]
         pattern_regex: Option<String>,
     },
@@ -92,6 +92,10 @@ impl RuleEngine {
 
     pub fn len(&self) -> usize {
         self.rules.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.rules.is_empty()
     }
 
     fn load_rules_from_dir(dir: &str, rules: &mut Vec<Rule>) -> Result<()> {
@@ -128,7 +132,7 @@ impl RuleEngine {
             if self.matches(rule, source) {
                 let line = find_first_line(source, rule.pattern.as_deref().or_else(|| {
                     rule.patterns.as_ref().and_then(|p| first_pattern(p))
-                }).or_else(|| rule.pattern_either.as_ref().and_then(|p| first_pattern(p))).or_else(|| rule.pattern_regex.as_deref()).unwrap_or(""));
+                }).or_else(|| rule.pattern_either.as_ref().and_then(|p| first_pattern(p))).or(rule.pattern_regex.as_deref()).unwrap_or(""));
                 findings.push(Finding {
                     id: format!("{}-{}", rule.id, uuid::Uuid::new_v4().simple()),
                     severity: rule.severity(),
@@ -347,11 +351,7 @@ fn ast_matches(source: &str, languages: &[String], pattern: &str) -> bool {
         if lang == "regex" {
             continue;
         }
-        let normalized = match lang.as_str() {
-            "typescript" => "typescript",
-            "javascript" => "javascript",
-            other => other,
-        };
+        let normalized = lang.as_str();
         if let Ok(true) = query_pattern(source.as_bytes(), normalized, pattern) {
             return true;
         }

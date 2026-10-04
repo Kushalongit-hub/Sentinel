@@ -1,3 +1,4 @@
+#![allow(clippy::single_component_path_imports)]
 use serde_json;
 use thiserror::Error;
 

@@ -140,7 +140,7 @@ fn parse_semgrep(raw: &str) -> CoreResult<Finding> {
             recommendation: String::new(),
         });
     }
-    Err(sentinel_core::SentinelError::Parse("no results".to_string()).into())
+    Err(sentinel_core::SentinelError::Parse("no results".to_string()))
 }
 
 fn parse_bandit(raw: &str) -> CoreResult<Finding> {
@@ -185,7 +185,7 @@ fn parse_bandit(raw: &str) -> CoreResult<Finding> {
             recommendation: String::new(),
         });
     }
-    Err(sentinel_core::SentinelError::Parse("no results".to_string()).into())
+    Err(sentinel_core::SentinelError::Parse("no results".to_string()))
 }
 
 pub mod rules;

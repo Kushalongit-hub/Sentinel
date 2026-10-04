@@ -42,6 +42,12 @@ impl TaintContext {
     }
 }
 
+impl Default for TaintContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TaintFinding {
     pub rule_id: String,
@@ -49,6 +55,14 @@ pub struct TaintFinding {
     pub line: usize,
     pub severity: Severity,
     pub file_path: std::path::PathBuf,
+}
+
+#[derive(Debug)]
+struct TaintRuleContext<'a> {
+    rule_id: &'a str,
+    message: &'a str,
+    severity: Severity,
+    file_path: &'a std::path::Path,
 }
 
 impl TaintFinding {
@@ -103,14 +117,14 @@ impl TaintEngine {
             source,
             &root,
             &mut contexts,
-            &self.source_patterns,
-            &self.sink_patterns,
-            &self.sanitizer_patterns,
+            self,
             &mut findings,
-            rule_id,
-            message,
-            severity,
-            file_path,
+            &TaintRuleContext {
+                rule_id,
+                message,
+                severity,
+                file_path,
+            },
         );
 
         findings.into_iter().map(|f| f.into_finding()).collect()
@@ -121,15 +135,18 @@ fn walk_with_scope(
     source: &str,
     node: &Node,
     contexts: &mut Vec<TaintContext>,
-    sources: &[String],
-    sinks: &[String],
-    sanitizers: &[String],
+    engine: &TaintEngine,
     findings: &mut Vec<TaintFinding>,
-    rule_id: &str,
-    message: &str,
-    severity: Severity,
-    file_path: &std::path::Path,
+    rule: &TaintRuleContext,
 ) {
+    let sources = &engine.source_patterns;
+    let sinks = &engine.sink_patterns;
+    let sanitizers = &engine.sanitizer_patterns;
+    let rule_id = rule.rule_id;
+    let message = rule.message;
+    let severity = rule.severity;
+    let file_path = rule.file_path;
+
     match node.kind() {
         "function_declaration" | "function_expression" | "arrow_function" | "method_definition" => {
             let mut ctx = TaintContext::new();
@@ -144,7 +161,7 @@ fn walk_with_scope(
 
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
-                walk_with_scope(source, &child, contexts, sources, sinks, sanitizers, findings, rule_id, message, severity, file_path);
+                walk_with_scope(source, &child, contexts, engine, findings, rule);
             }
 
             contexts.pop();
@@ -175,7 +192,7 @@ fn walk_with_scope(
                         }
                     }
                 }
-                walk_with_scope(source, &child, contexts, sources, sinks, sanitizers, findings, rule_id, message, severity, file_path);
+                walk_with_scope(source, &child, contexts, engine, findings, rule);
             }
         }
         "assignment_expression" => {
@@ -221,13 +238,13 @@ fn walk_with_scope(
             }
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
-                walk_with_scope(source, &child, contexts, sources, sinks, sanitizers, findings, rule_id, message, severity, file_path);
+                walk_with_scope(source, &child, contexts, engine, findings, rule);
             }
         }
         _ => {
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
-                walk_with_scope(source, &child, contexts, sources, sinks, sanitizers, findings, rule_id, message, severity, file_path);
+                walk_with_scope(source, &child, contexts, engine, findings, rule);
             }
         }
     }
