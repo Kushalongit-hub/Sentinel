@@ -10,6 +10,8 @@ use sentinel_ast::query_pattern;
 use sentinel_core::{Finding, Severity};
 use sentinel_taint::TaintEngine;
 
+include!(concat!(env!("OUT_DIR"), "/embedded_rules.rs"));
+
 #[derive(Error, Debug)]
 pub enum RuleError {
     #[error("IO error: {0}")]
@@ -44,6 +46,8 @@ pub struct Rule {
     pub pattern_sinks: Option<Vec<PatternEntry>>,
     #[serde(rename = "pattern-sanitizers")]
     pub pattern_sanitizers: Option<Vec<PatternEntry>>,
+    #[serde(skip)]
+    pub compiled_regex: Option<Regex>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -77,6 +81,33 @@ impl Rule {
             _ => Severity::Medium,
         }
     }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.id.trim().is_empty() {
+            return Err(RuleError::Parse("rule id is empty".to_string()));
+        }
+        if self.message.trim().is_empty() {
+            return Err(RuleError::Parse(format!("rule {} has empty message", self.id)));
+        }
+        if self.languages.is_empty() {
+            return Err(RuleError::Parse(format!("rule {} has no languages", self.id)));
+        }
+        match self.severity.to_lowercase().as_str() {
+            s if ["error", "warning", "info", "medium", "high", "low", "critical"].contains(&s) => {}
+            _ => return Err(RuleError::Parse(format!("rule {} has unknown severity: {}", self.id, self.severity))),
+        }
+        if let Some(mode) = &self.mode {
+            match mode.as_str() {
+                "taint" => {}
+                "grep" | "search" => {}
+                _ => return Err(RuleError::Parse(format!("rule {} has unsupported mode: {}", self.id, mode))),
+            }
+        }
+        if let Some(re) = &self.pattern_regex {
+            Regex::new(re).map_err(|e| RuleError::Parse(format!("rule {} has invalid regex: {}", self.id, e)))?;
+        }
+        Ok(())
+    }
 }
 
 pub struct RuleEngine {
@@ -87,7 +118,47 @@ impl RuleEngine {
     pub fn load_from_dir(dir: &str) -> Result<Self> {
         let mut rules = Vec::new();
         Self::load_rules_from_dir(dir, &mut rules)?;
+        Self::compile_and_validate(&mut rules)?;
         Ok(Self { rules })
+    }
+
+    pub fn load_from_embedded() -> Self {
+        let mut rules = Vec::new();
+        for (_, contents) in embedded_rules() {
+            if let Ok(rule_set) = RuleSet::from_yaml(contents) {
+                rules.extend(rule_set.rules);
+            }
+        }
+        let _ = Self::compile_and_validate(&mut rules);
+        Self { rules }
+    }
+
+    pub fn load_from_embedded_validated() -> Result<Self> {
+        let mut rules = Vec::new();
+        let mut errors = Vec::new();
+        for (path, contents) in embedded_rules() {
+            match RuleSet::from_yaml(contents) {
+                Ok(rule_set) => rules.extend(rule_set.rules),
+                Err(e) => errors.push(format!("{}: {}", path, e)),
+            }
+        }
+        if !errors.is_empty() {
+            return Err(RuleError::Parse(errors.join("\n")));
+        }
+        Self::compile_and_validate(&mut rules)?;
+        Ok(Self { rules })
+    }
+
+    fn compile_and_validate(rules: &mut Vec<Rule>) -> Result<()> {
+        for rule in rules.iter_mut() {
+            if let Some(re) = &rule.pattern_regex {
+                if let Ok(compiled) = Regex::new(re) {
+                    rule.compiled_regex = Some(compiled);
+                }
+            }
+            rule.validate()?;
+        }
+        Ok(())
     }
 
     pub fn len(&self) -> usize {
@@ -375,4 +446,12 @@ fn find_first_line(source: &str, pattern: &str) -> usize {
 #[derive(Debug, Deserialize)]
 pub struct RuleSet {
     pub rules: Vec<Rule>,
+}
+
+impl RuleSet {
+    pub fn from_yaml(contents: &str) -> Result<Self> {
+        let rule_set: RuleSet = serde_yaml::from_str(contents)
+            .map_err(|e| RuleError::Parse(format!("{}", e)))?;
+        Ok(rule_set)
+    }
 }

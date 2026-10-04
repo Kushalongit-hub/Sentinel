@@ -33,11 +33,22 @@ enum Commands {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    match cli.command {
-        Commands::Audit { path } => audit(path),
-        Commands::Diff => diff(),
-        Commands::Explain { finding_id } => explain(finding_id),
-        Commands::Rules => rules(),
-        Commands::Tui => run_tui(),
-    }
+    let code = match cli.command {
+        Commands::Audit { path } => audit(path)?,
+        Commands::Diff => diff()?,
+        Commands::Explain { finding_id } => {
+            explain(finding_id)?;
+            0
+        }
+        Commands::Rules => {
+            rules()?;
+            0
+        }
+        Commands::Tui => {
+            run_tui()?;
+            0
+        }
+    };
+
+    std::process::exit(code);
 }

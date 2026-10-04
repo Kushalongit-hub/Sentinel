@@ -1,21 +1,44 @@
 use anyhow::Result;
 use std::io::{self, Write};
 
-pub fn run() -> Result<()> {
+pub fn run() -> Result<i32> {
     loop {
         print_menu();
         print!("> ");
         io::stdout().flush()?;
 
         let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
+        if io::stdin().read_line(&mut input).is_err() {
+            println!();
+            break;
+        }
         let input = input.trim();
 
+        if input.is_empty() {
+            continue;
+        }
+
         match input {
-            "1" => prompt_audit()?,
-            "2" => prompt_diff()?,
-            "3" => prompt_explain()?,
-            "4" => prompt_rules()?,
+            "1" => {
+                if let Err(e) = prompt_audit() {
+                    eprintln!("[error] {}", e);
+                }
+            }
+            "2" => {
+                if let Err(e) = prompt_diff() {
+                    eprintln!("[error] {}", e);
+                }
+            }
+            "3" => {
+                if let Err(e) = prompt_explain() {
+                    eprintln!("[error] {}", e);
+                }
+            }
+            "4" => {
+                if let Err(e) = prompt_rules() {
+                    eprintln!("[error] {}", e);
+                }
+            }
             "5" => {
                 println!("Exiting.");
                 break;
@@ -26,7 +49,7 @@ pub fn run() -> Result<()> {
         println!();
     }
 
-    Ok(())
+    Ok(0)
 }
 
 fn print_menu() {
@@ -38,7 +61,7 @@ fn print_menu() {
     println!("5. Exit");
 }
 
-fn prompt_audit() -> Result<()> {
+fn prompt_audit() -> Result<i32> {
     print!("Path to audit: ");
     io::stdout().flush()?;
     let mut path = String::new();
@@ -47,17 +70,17 @@ fn prompt_audit() -> Result<()> {
 
     if path.is_empty() {
         println!("No path provided.");
-        return Ok(());
+        return Ok(0);
     }
 
     crate::audit::audit(path.to_string())
 }
 
-fn prompt_diff() -> Result<()> {
+fn prompt_diff() -> Result<i32> {
     crate::diff::diff()
 }
 
-fn prompt_explain() -> Result<()> {
+fn prompt_explain() -> Result<i32> {
     print!("Finding ID: ");
     io::stdout().flush()?;
     let mut id = String::new();
@@ -66,12 +89,12 @@ fn prompt_explain() -> Result<()> {
 
     if id.is_empty() {
         println!("No finding ID provided.");
-        return Ok(());
+        return Ok(0);
     }
 
     crate::explain::explain(id.to_string())
 }
 
-fn prompt_rules() -> Result<()> {
+fn prompt_rules() -> Result<i32> {
     crate::rules::rules()
 }

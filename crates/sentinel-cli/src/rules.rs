@@ -1,11 +1,11 @@
 use anyhow::Result;
 
-pub fn rules() -> Result<()> {
+pub fn rules() -> Result<i32> {
     let db = match sentinel_db::SentinelDb::new(".sentinel.db") {
         Ok(db) => db,
         Err(_) => {
             println!("No local database found. Run `sentinel audit` first.");
-            return Ok(());
+            return Ok(0);
         }
     };
 
@@ -24,5 +24,5 @@ pub fn rules() -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(0)
 }

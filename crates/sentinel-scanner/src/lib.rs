@@ -190,6 +190,8 @@ fn parse_bandit(raw: &str) -> CoreResult<Finding> {
 
 pub mod rules;
 pub use rules::{RuleEngine, RuleError as RulesError};
+pub mod pipeline;
+pub use pipeline::{run_scan, persist_and_report, ScanOptions, ScanPipelineResult};
 
 #[cfg(test)]
 mod tests {

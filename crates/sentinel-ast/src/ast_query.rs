@@ -133,7 +133,7 @@ fn infer_node_kinds(language: &str, pattern: &str) -> &'static [&'static str] {
         }
         "python" => {
             if pattern.contains("(") {
-                &["call_expression"]
+                &["call"]
             } else {
                 &["identifier", "attribute"]
             }

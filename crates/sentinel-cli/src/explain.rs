@@ -1,18 +1,17 @@
 use anyhow::Result;
-use sentinel_llm::OllamaClient;
 
-pub fn explain(finding_id: String) -> Result<()> {
+pub fn explain(finding_id: String) -> Result<i32> {
     let db = match sentinel_db::SentinelDb::new(".sentinel.db") {
         Ok(db) => db,
         Err(_) => {
             println!("No local database found. Run `sentinel audit` first.");
-            return Ok(());
+            return Ok(0);
         }
     };
 
     match db.get_finding(&finding_id) {
         Ok(Some(finding)) => {
-            let client = OllamaClient::new(sentinel_llm::ProviderConfig {
+            let client = sentinel_llm::OllamaClient::new(sentinel_llm::ProviderConfig {
                 endpoint: "http://localhost:11434".to_string(),
                 model: "llama2".to_string(),
                 api_key: None,
@@ -40,5 +39,5 @@ pub fn explain(finding_id: String) -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(0)
 }

@@ -46,3 +46,37 @@ pub struct ScanReport {
     pub scanners_used: Vec<String>,
     pub duration_ms: u128,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScanOutcome {
+    Complete,
+    Incomplete,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScannerOutcome {
+    Completed,
+    Failed,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScannerResult {
+    pub name: String,
+    pub outcome: ScannerOutcome,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ThresholdConfig {
+    pub minimum_severity: Severity,
+}
+
+impl Default for ThresholdConfig {
+    fn default() -> Self {
+        Self {
+            minimum_severity: Severity::Info,
+        }
+    }
+}
