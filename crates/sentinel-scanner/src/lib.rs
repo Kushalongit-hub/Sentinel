@@ -71,28 +71,15 @@ impl SubprocessRunner {
     }
 }
 
-pub fn normalize_finding(raw: &str, scanner: &str) -> CoreResult<Finding> {
+pub fn normalize_finding(raw: &str, scanner: &str) -> CoreResult<Option<Finding>> {
     match scanner {
         "semgrep" => parse_semgrep(raw),
         "bandit" => parse_bandit(raw),
-        _ => Ok(Finding {
-            id: format!("{}-stub", scanner),
-            severity: models::Severity::Info,
-            confidence: 0.0,
-            category: scanner.to_string(),
-            file: std::path::PathBuf::new(),
-            line: 0,
-            title: format!("{} finding", scanner),
-            description: raw.lines().next().unwrap_or("").to_string(),
-            execution_path: Vec::new(),
-            affected_components: Vec::new(),
-            evidence: Vec::new(),
-            recommendation: String::new(),
-        }),
+        _ => Err(sentinel_core::SentinelError::Parse(format!("unsupported scanner: {}", scanner)).into()),
     }
 }
 
-fn parse_semgrep(raw: &str) -> CoreResult<Finding> {
+fn parse_semgrep(raw: &str) -> CoreResult<Option<Finding>> {
     let json: serde_json::Value = serde_json::from_str(raw)
         .map_err(|e| sentinel_core::SentinelError::Parse(e.to_string()))?;
     let results = json
@@ -125,7 +112,7 @@ fn parse_semgrep(raw: &str) -> CoreResult<Finding> {
             Some("INFO") => models::Severity::Info,
             _ => models::Severity::Info,
         };
-        return Ok(Finding {
+        return Ok(Some(Finding {
             id: format!("semgrep-{}", rule_id),
             severity,
             confidence: 0.9,
@@ -138,12 +125,12 @@ fn parse_semgrep(raw: &str) -> CoreResult<Finding> {
             affected_components: Vec::new(),
             evidence: Vec::new(),
             recommendation: String::new(),
-        });
+        }));
     }
-    Err(sentinel_core::SentinelError::Parse("no results".to_string()))
+    Ok(None)
 }
 
-fn parse_bandit(raw: &str) -> CoreResult<Finding> {
+fn parse_bandit(raw: &str) -> CoreResult<Option<Finding>> {
     let json: serde_json::Value = serde_json::from_str(raw)
         .map_err(|e| sentinel_core::SentinelError::Parse(e.to_string()))?;
     let results = json
@@ -170,7 +157,7 @@ fn parse_bandit(raw: &str) -> CoreResult<Finding> {
             Some("LOW") => models::Severity::Low,
             _ => models::Severity::Info,
         };
-        return Ok(Finding {
+        return Ok(Some(Finding {
             id: format!("bandit-{}", issue_id),
             severity,
             confidence: 0.8,
@@ -183,9 +170,9 @@ fn parse_bandit(raw: &str) -> CoreResult<Finding> {
             affected_components: Vec::new(),
             evidence: Vec::new(),
             recommendation: String::new(),
-        });
+        }));
     }
-    Err(sentinel_core::SentinelError::Parse("no results".to_string()))
+    Ok(None)
 }
 
 pub mod rules;

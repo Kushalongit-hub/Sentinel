@@ -102,8 +102,16 @@ pub fn run_scan(options: ScanOptions) -> ScanPipelineResult {
             match SubprocessRunner::run(&scanner, &[], target) {
                 Ok(raw) => {
                     match normalize_finding(&raw, &scanner) {
-                        Ok(finding) => {
+                        Ok(Some(finding)) => {
                             findings.push(finding);
+                            scanners_used.push(scanner.clone());
+                            scanner_results.push(ScannerResult {
+                                name: scanner.clone(),
+                                outcome: ScannerOutcome::Completed,
+                                error: None,
+                            });
+                        }
+                        Ok(None) => {
                             scanners_used.push(scanner.clone());
                             scanner_results.push(ScannerResult {
                                 name: scanner.clone(),
