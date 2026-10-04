@@ -299,7 +299,6 @@ fn tui_exits_on_eof_and_survives_findings() {
     let out = timed_output(
         Command::new(env!("CARGO_BIN_EXE_sentinel"))
             .current_dir(&f.0)
-            .arg("tui")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped()),

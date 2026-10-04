@@ -95,7 +95,7 @@ impl Default for AiArgs {
 #[command(name = "sentinel", about = "Offline-first code auditor")]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 #[derive(Subcommand)]
 enum Commands {
@@ -173,7 +173,9 @@ enum BaselineCommand {
 }
 fn main() {
     let cli = Cli::parse();
-    let result = match cli.command {
+    let result = match cli.command.unwrap_or_else(|| Commands::Tui {
+        path: PathBuf::from("."),
+    }) {
         Commands::Audit { path, options } => audit::audit_with_options(path, options),
         Commands::Diff {
             options,

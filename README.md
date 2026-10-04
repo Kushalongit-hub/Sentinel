@@ -566,8 +566,13 @@ path is committed to the project.
 ## Terminal workspace
 
 ```sh
+sentinel
+# Or choose another project explicitly:
 sentinel tui .
 ```
+
+Running `sentinel` without arguments opens the TUI for the current directory.
+Existing subcommands and `sentinel --help` remain available.
 
 ![Sentinel terminal workspace](docs/sentinel-tui.png)
 
