@@ -166,7 +166,7 @@ fn walk_with_scope(
 
             contexts.pop();
         }
-        "variable_declaration" | "lexical_declaration" => {
+        "lexical_declaration" | "variable_declaration" => {
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 if child.kind() == "variable_declarator" {
@@ -243,6 +243,34 @@ fn walk_with_scope(
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 walk_with_scope(source, &child, contexts, engine, findings, rule);
+            }
+        }
+        "if_statement" | "for_in_statement" | "for_of_statement" | "while_statement" | "do_statement" | "try_statement" | "statement_block" => {
+            if let Some(block) = node.child_by_field_name("body") {
+                if contexts.last().map(|ctx| ctx.variables.len()) > Some(0) {
+                    contexts.push(contexts.last().cloned().unwrap_or_default());
+                } else {
+                    contexts.push(TaintContext::new());
+                }
+                walk_with_scope(source, &block, contexts, engine, findings, rule);
+                contexts.pop();
+            } else {
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    walk_with_scope(source, &child, contexts, engine, findings, rule);
+                }
+            }
+        }
+        "catch_clause" | "finally_clause" => {
+            if let Some(body) = node.child_by_field_name("body") {
+                contexts.push(contexts.last().cloned().unwrap_or_default());
+                walk_with_scope(source, &body, contexts, engine, findings, rule);
+                contexts.pop();
+            } else {
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    walk_with_scope(source, &child, contexts, engine, findings, rule);
+                }
             }
         }
         _ => {
