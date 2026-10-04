@@ -41,6 +41,56 @@ impl Default for ScanArgs {
         }
     }
 }
+#[derive(Debug, Clone, Copy, Default, ValueEnum)]
+pub enum AiProvider {
+    #[default]
+    Local,
+    Nim,
+    Both,
+}
+#[derive(Debug, Clone, Args)]
+pub struct AiArgs {
+    #[arg(long, value_enum, default_value = "local")]
+    pub provider: AiProvider,
+    #[arg(long)]
+    pub local_model: Option<String>,
+    #[arg(long)]
+    pub local_endpoint: Option<String>,
+    #[arg(long)]
+    pub nim_model: Option<String>,
+    #[arg(long)]
+    pub nim_endpoint: Option<String>,
+    #[arg(long, default_value = "NVIDIA_API_KEY")]
+    pub nim_key_env: String,
+    #[arg(long, default_value_t = 60, value_parser = clap::value_parser!(u64).range(1..))]
+    pub ai_timeout: u64,
+    #[arg(long, default_value_t = 12000, value_parser = clap::value_parser!(u64).range(1024..=65536))]
+    pub context_bytes: u64,
+    /// Print the exact shared context and messages without contacting a provider.
+    #[arg(long)]
+    pub context_only: bool,
+    #[arg(long)]
+    pub json: bool,
+    #[arg(long)]
+    pub question: Option<String>,
+}
+impl Default for AiArgs {
+    fn default() -> Self {
+        Self {
+            provider: AiProvider::Local,
+            local_model: None,
+            local_endpoint: None,
+            nim_model: None,
+            nim_endpoint: None,
+            nim_key_env: "NVIDIA_API_KEY".into(),
+            ai_timeout: 60,
+            context_bytes: 12000,
+            context_only: false,
+            json: false,
+            question: None,
+        }
+    }
+}
 #[derive(Parser)]
 #[command(name = "sentinel", about = "Offline-first code auditor")]
 struct Cli {
@@ -70,6 +120,17 @@ enum Commands {
         project: PathBuf,
         #[arg(long)]
         db: Option<PathBuf>,
+        #[command(flatten)]
+        ai: AiArgs,
+    },
+    /// Explain architecture, code behavior, and testing opportunities from project evidence.
+    ExplainCodebase {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        db: Option<PathBuf>,
+        #[command(flatten)]
+        ai: AiArgs,
     },
     Rules,
     Tui,
@@ -88,7 +149,9 @@ fn main() {
             finding_id,
             project,
             db,
-        } => explain::explain_at(finding_id, project, db),
+            ai,
+        } => explain::explain_with_ai(finding_id, project, db, ai),
+        Commands::ExplainCodebase { path, db, ai } => explain::explain_codebase(path, db, ai),
         Commands::Rules => rules::rules(),
         Commands::Tui => tui::run(),
     };

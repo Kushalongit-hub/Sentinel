@@ -1323,9 +1323,11 @@ name = "sentinel-llm"
 version = "0.1.0"
 dependencies = [
  "reqwest",
+ "sentinel-ast",
  "sentinel-core",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
 ]
 

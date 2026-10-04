@@ -70,6 +70,66 @@ fn report(output: &Output) -> serde_json::Value {
         )
     })
 }
+#[test]
+fn codebase_context_preview_is_provider_independent_and_has_no_database_side_effect() {
+    let fixture = Fixture::new();
+    fixture.write("main.rs", "fn main() {}\n");
+    fixture.write("README.md", "# Fixture\nA simple executable.\n");
+    let local = fixture.run(&[
+        "explain-codebase",
+        ".",
+        "--context-only",
+        "--provider",
+        "local",
+    ]);
+    let both = fixture.run(&[
+        "explain-codebase",
+        ".",
+        "--context-only",
+        "--provider",
+        "both",
+    ]);
+    assert!(
+        local.status.success(),
+        "{}",
+        String::from_utf8_lossy(&local.stderr)
+    );
+    assert!(
+        both.status.success(),
+        "{}",
+        String::from_utf8_lossy(&both.stderr)
+    );
+    assert_eq!(report(&local), report(&both));
+    assert!(!fixture.0.join(".sentinel.db").exists());
+    assert!(
+        report(&both)["context"]["excerpts"]
+            .as_array()
+            .unwrap()
+            .len()
+            >= 2
+    );
+}
+#[test]
+fn finding_context_contains_the_actual_finding_line() {
+    let fixture = Fixture::new();
+    let mut source = "import hashlib\n".to_string();
+    source.push_str(&"pass\n".repeat(200));
+    source.push_str("hashlib.md5(data)\n");
+    fixture.write("example.py", source);
+    let scan = fixture.run(&["audit", ".", "--format", "json"]);
+    let scan_report = report(&scan);
+    let id = scan_report["findings"][0]["id"].as_str().unwrap();
+    let preview = fixture.run(&["explain", id, "--context-only"]);
+    assert!(
+        preview.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    assert!(preview
+        .stdout
+        .windows(b"202: hashlib.md5(data)".len())
+        .any(|w| w == b"202: hashlib.md5(data)"));
+}
 fn timed_output(command: &mut Command) -> Output {
     let mut child = command.spawn().unwrap();
     let start = Instant::now();

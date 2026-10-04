@@ -19,7 +19,7 @@ sentinel-db = { path = "../sentinel-db" }
 colored = "2.1"
 thiserror = "1.0"
 anyhow = "1.0"
+serde_json = "1.0"
 
 [dev-dependencies]
 rusqlite = { version = "0.31", features = ["bundled"] }
-serde_json = "1.0"
