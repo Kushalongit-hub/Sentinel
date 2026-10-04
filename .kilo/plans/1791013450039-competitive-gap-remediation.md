@@ -1,85 +1,166 @@
-# Sentinel — Competitive Gap Remediation Plan
+# P1 — Intra-Procedural Taint Tracking Implementation Plan
 
-## Current State
-Sentinel is a rule-based AST scanner with 15 bundled YAML rules, tree-sitter symbol extraction, and optional external scanners. It lacks taint analysis, secret detection, supply-chain scanning, and LLM triage in the scan loop.
+## Goal
+Add intra-procedural taint tracking to Sentinel so taint-mode rules (`mode: taint`) can fire. This should activate ~80% of the semgrep rules already bundled but currently inert, increasing active rule coverage from ~5 to ~25+.
 
-## Competitive Analysis
-| Gap | Competitor | Sentinel Today |
-|-----|-----------|----------------|
-| Taint / dataflow | semgrep Pro, Qryon | None |
-| Secrets + git history | gitleaks, PledgeRecon | None |
-| Supply chain / advisories | cargo-audit, inkode | None |
-| False-positive reduction | PledgeRecon LLM triage, inkode call graph | None |
-| Unsafe / FFI auditing | rust-security-auditor, cargo-capsec | None |
-| Rule-match precision | semgrep AST-aware patterns | Substring matching |
+## Scope
+- New crate: `sentinel-taint`
+- Modify: `sentinel-scanner/src/rules.rs` to support `mode: taint` rules
+- Smoke test: `cargo run -- audit C:\projects\OpenConnect` must find ≥ 5 findings after P1 (currently 3 without taint)
 
-## Proposed Remediation (Priority Order)
+## Out of Scope (P1)
+- Cross-file taint (inter-procedural)
+- Rust taint tracking (JS only in P1)
+- MIR-based analysis
+- Taint through complex dataflow (spread, destructuring)
 
-### P1 — AST Taint Tracking for Rust
-**Why**: This is the single biggest detection gap. semgrep Pro's Rust taint rules catch SQL injection, command injection, SSRF, and path traversal. Without taint, Sentinel misses entire vulnerability classes.
+## Design
 
-**Approach**:
-- Add `sentinel-taint` crate with source/sink/sanitizer registry
-- Use tree-sitter to find function arguments marked as sources (e.g., `web::Path`, `Request`, `Json<T>`)
-- Track taint through assignments, method calls, and `format!`/`push_str`-style string operations
-- Match tainted data reaching sinks (`diesel::sql_query`, `std::process::Command`, `reqwest::Client::get`, `std::fs::File::open`)
-- Implement intra-procedural analysis first; inter-procedural later
+### New Crate: `sentinel-taint`
 
-**Files affected**: `crates/sentinel-ast/`, `crates/sentinel-scanner/`
+**Dependencies**: `sentinel-core`, `tree-sitter`, `tree-sitter-javascript`, `thiserror`
 
-### P2 — Secret Detection
-**Why**: gitleaks-style detection is table stakes for a security scanner. Easy to implement, high user value.
+**Core types**:
+```rust
+pub enum TaintLevel { Clean, Tainted, Sanitized }
 
-**Approach**:
-- Add `sentinel-secrets` crate
-- Embed regex patterns for API keys, tokens, passwords, AWS keys, GitHub PATs
-- Add Shannon-entropy check for high-entropy strings (> 4.5 bits/char)
-- Scan all text files during `audit`
-- Optional: scan git history via `git log -p` subprocess
+pub struct TaintContext {
+    pub variables: HashMap<String, TaintLevel>,
+    pub sources: Vec<String>,
+    pub sinks: Vec<String>,
+    pub sanitizers: Vec<String>,
+}
 
-**Files affected**: `crates/sentinel-scanner/`, `crates/sentinel-cli/src/audit.rs`
+pub struct TaintEngine {
+    source_patterns: Vec<String>,
+    sink_patterns: Vec<String>,
+    sanitizer_patterns: Vec<String>,
+}
 
-### P3 — Supply-Chain Scanning
-**Why**: RUSTSEC advisories and yanked crates are a major Rust-specific risk. inkode and cargo-audit already do this; Sentinel doesn't.
+pub fn analyze_function(
+    engine: &TaintEngine,
+    source: &str,
+    function_body: &str,
+) -> Vec<TaintFinding>;
+```
 
-**Approach**:
-- Add `sentinel-supply` crate
-- Parse `Cargo.lock` for crate names + versions
-- Query OSV API (`https://api.osv.dev/v1/query`) for Rust ecosystem advisories
-- Cache results in SQLite
-- Fall back to wrapping `cargo audit` if installed
+**Algorithm** (intra-procedural, single pass):
+1. Parse function body with tree-sitter-javascript
+2. Walk AST top-to-bottom
+3. For each assignment/variable declaration:
+   - If RHS contains a source pattern → mark LHS variable as `Tainted`
+   - If RHS contains a sanitizer pattern → mark LHS as `Clean`
+   - If RHS is a tainted variable → mark LHS as `Tainted`
+4. For each call expression:
+   - If call matches a sink pattern AND any argument/variable in scope is `Tainted` → emit `TaintFinding`
 
-**Files affected**: `crates/sentinel-supply/` (new), `crates/sentinel-db/`
+### Rule Schema Extension
 
-### P4 — LLM Triage in Scan Loop
-**Why**: PledgeRecon's differentiator is local Ollama triage reducing false positives. Sentinel already has the `sentinel explain` path; this extends it to auto-triage.
+Add to `sentinel-scanner/src/rules.rs`:
+```yaml
+rules:
+  - id: detect-child-process
+    mode: taint
+    message: "Detected subprocess with user-controlled input"
+    languages: [javascript, typescript]
+    severity: ERROR
+    pattern-sources:
+      - patterns:
+        - pattern-inside: |
+            function ... (...,$FUNC,...) { ... }
+        - focus-metavariable: $FUNC
+    pattern-sinks:
+      - patterns:
+        - pattern-either:
+          - pattern: child_process.exec($CMD,...)
+          - pattern: child_process.execSync($CMD,...)
+        - focus-metavariable: $CMD
+```
 
-**Approach**:
-- After each scan, send low-confidence findings to Ollama
-- Ask LLM to classify as true positive / false positive / needs review
-- Downgrade false positives to `Info` severity
-- Require `--with-llm-triage` flag (opt-in, not default)
+**Deserialization changes**:
+- Add `mode: Option<String>` to `Rule` (default: `search`)
+- Add `pattern_sources: Option<Vec<PatternEntry>>` to `Rule`
+- Add `pattern_sinks: Option<Vec<PatternEntry>>` to `Rule`
+- Add `pattern_sanitizers: Option<Vec<PatternEntry>>` to `Rule`
 
-**Files affected**: `crates/sentinel-llm/`, `crates/sentinel-cli/src/audit.rs`
+### Rule Engine Integration
 
-### P5 — Unsafe / FFI Auditing
-**Why**: rust-security-auditor and cargo-capsec fill this niche. Sentinel's current `unsafe-usage` rule is just a substring match.
+In `RuleEngine::scan()`:
+1. If `rule.mode == "taint"` → delegate to `TaintEngine::analyze_file()`
+2. Otherwise → existing pattern matching
 
-**Approach**:
-- Add tree-sitter queries to find `unsafe { ... }`, `extern "C"`, `transmute`, `MaybeUninit`, raw pointer ops
-- Build call graph from AST to see if unsafe is reachable from public API
-- Flag unsafe without `// SAFETY:` comment
+**New method**: `TaintEngine::analyze_file(source: &str, language: &str, rule: &Rule) -> Vec<Finding>`
 
-**Files affected**: `crates/sentinel-ast/`, `crates/sentinel-scanner/rules/`
+Algorithm:
+1. For each taint rule matching the language:
+   a. Extract source patterns from `pattern-sources`
+   b. Extract sink patterns from `pattern-sinks`
+   c. Extract sanitizer patterns from `pattern-sanitizers`
+   d. Parse file with tree-sitter
+   e. For each function in file:
+      - Call `analyze_function()` with the rule's patterns
+      - Collect findings
+2. Deduplicate by `(file, line, rule_id)`
 
-## Out of Scope (V0.2)
-- MIR-based analysis (requires nightly + custom driver)
-- Cross-file taint (P1 is intra-procedural only)
-- WASM custom rules
-- TUI / MCP server
+### Pattern Extraction from YAML
 
-## Validation
-- `cargo check --workspace`
-- `cargo test --workspace`
-- Smoke test: `cargo run -- audit .` on a fixture repo with known vulnerabilities
-- Benchmark: scan 50K-line repo, ensure < 30s
+For taint rules, extract concrete strings from `PatternEntry`:
+- `pattern`: exact string match
+- `pattern-regex`: regex to compile
+- `pattern-inside`: context requirement (function must be inside this pattern)
+- `focus-metavariable`: which variable to track (default: first metavariable)
+
+**Helper**: `fn extract_string_patterns(entry: &PatternEntry) -> Vec<String>`
+
+### Tree-Sitter Queries
+
+Use tree-sitter's S-expression query language to find:
+- Function declarations: `(function_declaration name: (identifier) body: (statement_block))`
+- Variable declarations: `(variable_declarator name: (identifier) value: (_))`
+- Call expressions: `(call_expression function: (member_expression) arguments: (_))`
+- Member expressions: `(member_expression object: (_) property: (property_identifier))`
+
+**Note**: We can start with manual AST walking instead of S-expression queries for P1, since tree-sitter-javascript provides `node.children()` and `node.kind()`.
+
+## Implementation Steps
+
+### Step 1: Add `tree-sitter-javascript` dependency
+- Add to `sentinel-taint/Cargo.toml`:
+  ```toml
+  tree-sitter = "0.22"
+  tree-sitter-javascript = "0.21"
+  ```
+
+### Step 2: Create `sentinel-taint/src/lib.rs`
+- Define `TaintLevel`, `TaintContext`, `TaintEngine`, `TaintFinding`
+- Implement `TaintEngine::new()` with default source/sink/sanitizer patterns for JS
+- Implement `analyze_function()` using tree-sitter AST walking
+
+### Step 3: Extend `sentinel-scanner/src/rules.rs`
+- Add `mode`, `pattern_sources`, `pattern_sinks`, `pattern_sanitizers` to `Rule`
+- Add `TaintEngine` import
+- In `RuleEngine::scan()`, branch on `rule.mode == "taint"`
+- Implement `analyze_taint_rule()` method
+
+### Step 4: Wire into `sentinel-cli/src/audit.rs`
+- No changes needed; `audit.rs` already calls `engine.scan(lang, source, path)` for all files
+
+### Step 5: Update existing rules to declare `mode`
+- For rules that need taint (`detect-child-process`, `dangerous-subprocess-use`), add `mode: taint` and `pattern-sources`/`pattern-sinks`
+- For rules that work with static matching, leave `mode` absent (defaults to `search`)
+
+### Step 6: Validation
+1. `cargo check --workspace`
+2. `cargo test --workspace`
+3. `cargo run -- audit C:\projects\OpenConnect`
+   - Expected: ≥ 5 findings (currently 3 without taint)
+   - Specifically: `js-expose-process-env` should still fire, plus at least 2 new taint-based findings
+4. If `detect-child-process` doesn't fire, add a debug print of taint state to verify the engine is tracking variables
+
+## Risks
+1. **False positives**: Intra-procedural taint will over-approximate. Any variable that touches a source will be marked tainted, even if it's later sanitized by a library function we don't recognize. Mitigation: start conservative, require explicit sanitizer patterns to clear taint.
+2. **Performance**: Walking the AST for every function in every file could slow scans. Mitigation: benchmark on OpenConnect; if > 2s, add caching per file.
+3. **Complexity**: Tree-sitter AST walking is verbose. Mitigation: use tree-sitter's built-in query language (`tree_sitter::Query`) instead of manual walking if the API is stable.
+
+## Fallback
+If P1 proves too complex, fall back to P2 (expand static rules) which is lower risk and still increases coverage.

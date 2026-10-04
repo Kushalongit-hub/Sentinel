@@ -1,0 +1,289 @@
+use std::{
+    io::Write,
+    path::PathBuf,
+    process::{Command, Output, Stdio},
+    time::{Duration, Instant},
+};
+struct Fixture(PathBuf);
+impl Fixture {
+    fn new() -> Self {
+        let root = std::env::temp_dir().join(format!(
+            "sentinel-cli-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        Self(root)
+    }
+    fn write(&self, name: &str, bytes: impl AsRef<[u8]>) {
+        std::fs::write(self.0.join(name), bytes).unwrap();
+    }
+    fn run(&self, args: &[&str]) -> Output {
+        Command::new(env!("CARGO_BIN_EXE_sentinel"))
+            .current_dir(&self.0)
+            .args(args)
+            .output()
+            .unwrap()
+    }
+    fn git(&self, args: &[&str]) {
+        let out = Command::new("git")
+            .current_dir(&self.0)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    fn repo(&self) {
+        self.git(&["init"]);
+        self.git(&["config", "user.name", "Fixture"]);
+        self.git(&["config", "user.email", "fixture@example.invalid"]);
+        self.write(".gitignore", ".sentinel.db*\n");
+    }
+}
+use std::time::{SystemTime, UNIX_EPOCH};
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        if self.0.starts_with(std::env::temp_dir())
+            && self
+                .0
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("sentinel-cli-")
+        {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+}
+fn report(output: &Output) -> serde_json::Value {
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|e| {
+        panic!(
+            "invalid JSON {e}: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    })
+}
+fn timed_output(command: &mut Command) -> Output {
+    let mut child = command.spawn().unwrap();
+    let start = Instant::now();
+    while child.try_wait().unwrap().is_none() {
+        if start.elapsed() > Duration::from_secs(5) {
+            let _ = child.kill();
+            panic!("CLI did not terminate");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    child.wait_with_output().unwrap()
+}
+#[test]
+fn relocated_binary_uses_embedded_rules_and_json() {
+    let f = Fixture::new();
+    f.write("bad.rs", "fn f(){unsafe{work();}}");
+    let exe = f.0.join(if cfg!(windows) {
+        "relocated.exe"
+    } else {
+        "relocated"
+    });
+    std::fs::copy(env!("CARGO_BIN_EXE_sentinel"), &exe).unwrap();
+    let out = Command::new(exe)
+        .current_dir(&f.0)
+        .args(["audit", ".", "--format", "json"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let r = report(&out);
+    assert_eq!(r["outcome"], "Complete");
+    assert_eq!(r["findings"][0]["title"], "rust-unsafe-usage");
+}
+#[test]
+fn invalid_source_has_incomplete_exit_code() {
+    let f = Fixture::new();
+    f.write("bad.js", [255]);
+    let out = f.run(&["audit", ".", "--format", "json"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(report(&out)["outcome"], "Incomplete");
+}
+#[test]
+fn single_file_audit_and_threshold_work() {
+    let f = Fixture::new();
+    f.write("bad.rs", "fn f(){unsafe{work();}}");
+    let out = f.run(&["audit", "bad.rs", "--format", "json", "--threshold", "high"]);
+    assert_eq!(out.status.code(), Some(0));
+    assert!(f.0.join(".sentinel.db").is_file());
+    assert!(!report(&out)["findings"].as_array().unwrap().is_empty());
+}
+#[test]
+fn repeat_scans_resolve_and_reactivate_without_duplicates() {
+    let f = Fixture::new();
+    f.write("bad.rs", "fn f(){unsafe{work();}}");
+    for _ in 0..2 {
+        assert_eq!(
+            f.run(&["audit", ".", "--format", "json"]).status.code(),
+            Some(1)
+        );
+    }
+    let conn = rusqlite::Connection::open(f.0.join(".sentinel.db")).unwrap();
+    assert_eq!(
+        conn.query_row("SELECT count(*) FROM findings", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    f.write("bad.rs", "fn f(){work();}");
+    assert!(f.run(&["audit", ".", "--format", "json"]).status.success());
+    assert_eq!(
+        conn.query_row(
+            "SELECT count(*) FROM findings WHERE resolved_at IS NULL",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    f.write("bad.rs", "fn f(){unsafe{work();}}");
+    assert_eq!(
+        f.run(&["audit", ".", "--format", "json"]).status.code(),
+        Some(1)
+    );
+    assert_eq!(
+        conn.query_row(
+            "SELECT count(*) FROM findings WHERE resolved_at IS NULL",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        1
+    );
+    assert_eq!(
+        conn.query_row("SELECT count(*) FROM scan_findings", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        3
+    );
+}
+#[test]
+fn persistence_failure_rolls_back_scan_and_changes_outcome() {
+    let f = Fixture::new();
+    f.write("bad.rs", "fn f(){unsafe{work();}}");
+    let path = f.0.join(".sentinel.db");
+    let _ = sentinel_db::SentinelDb::new(path.to_str().unwrap()).unwrap();
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch("CREATE TRIGGER reject_findings BEFORE INSERT ON findings BEGIN SELECT RAISE(ABORT,'test failure'); END;").unwrap();
+    let out = f.run(&["audit", ".", "--format", "json"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(report(&out)["outcome"], "Incomplete");
+    assert_eq!(
+        conn.query_row("SELECT count(*) FROM scans", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+}
+#[test]
+fn diff_includes_staged_unstaged_and_untracked_from_subdirectory() {
+    let f = Fixture::new();
+    f.repo();
+    f.write("staged.rs", "fn f(){}");
+    f.write("unstaged.rs", "fn f(){}");
+    f.git(&["add", "."]);
+    f.git(&["commit", "-m", "fixture"]);
+    f.write("staged.rs", "fn f(){unsafe{work();}}");
+    f.git(&["add", "staged.rs"]);
+    f.write("unstaged.rs", "fn f(){unsafe{work();}}");
+    f.write("untracked.rs", "fn f(){unsafe{work();}}");
+    std::fs::create_dir(f.0.join("sub")).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_sentinel"))
+        .current_dir(f.0.join("sub"))
+        .args(["diff", "--format", "json"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(report(&out)["findings"].as_array().unwrap().len(), 3);
+    let staged = f.run(&["diff", "--staged", "--format", "json"]);
+    assert_eq!(report(&staged)["findings"].as_array().unwrap().len(), 1);
+}
+#[test]
+fn diff_does_not_resolve_unselected_files() {
+    let f = Fixture::new();
+    f.repo();
+    f.write("a.rs", "fn f(){unsafe{work();}}");
+    f.write("b.rs", "fn f(){unsafe{work();}}");
+    f.git(&["add", "."]);
+    f.git(&["commit", "-m", "fixture"]);
+    f.run(&["audit", ".", "--format", "json"]);
+    f.write("a.rs", "fn f(){work();}");
+    f.git(&["add", "a.rs"]);
+    assert!(f
+        .run(&["diff", "--staged", "--format", "json"])
+        .status
+        .success());
+    let conn = rusqlite::Connection::open(f.0.join(".sentinel.db")).unwrap();
+    assert_eq!(
+        conn.query_row(
+            "SELECT count(*) FROM findings WHERE resolved_at IS NULL",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        1
+    );
+}
+#[test]
+fn tui_exits_on_eof_and_survives_findings() {
+    let f = Fixture::new();
+    let out = timed_output(
+        Command::new(env!("CARGO_BIN_EXE_sentinel"))
+            .current_dir(&f.0)
+            .arg("tui")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()),
+    );
+    assert!(out.status.success());
+    f.write("bad.rs", "fn f(){unsafe{work();}}");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_sentinel"))
+        .current_dir(&f.0)
+        .arg("tui")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(b"1\n.\n5\n").unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("Exiting."));
+}
+#[test]
+fn rules_list_actual_catalog_without_creating_database() {
+    let f = Fixture::new();
+    let out = f.run(&["rules"]);
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout).lines().count(), 19);
+    assert!(!f.0.join(".sentinel.db").exists());
+}
+#[test]
+fn sarif_has_stable_rule_and_valid_locations() {
+    let f = Fixture::new();
+    f.write("bad file.rs", "fn f(){unsafe{work();}}");
+    let out = f.run(&["audit", ".", "--format", "sarif"]);
+    let sarif = report(&out);
+    assert_eq!(
+        sarif["runs"][0]["results"][0]["ruleId"],
+        "rust-unsafe-usage"
+    );
+    let uri = sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"]
+        ["artifactLocation"]["uri"]
+        .as_str()
+        .unwrap();
+    assert!(uri.starts_with("file://"));
+    assert!(uri.contains("bad%20file.rs"));
+    assert_eq!(
+        sarif["runs"][0]["invocations"][0]["executionSuccessful"],
+        true
+    );
+}

@@ -70,12 +70,11 @@ impl OllamaClient {
             "{}/api/generate",
             self.config.endpoint.trim_end_matches('/')
         );
-        let response = self
-            .client
-            .post(&url)
-            .json(&body)
-            .send()
-            .map_err(|e| LlmError::Http(e.to_string()))?;
+        let mut request = self.client.post(&url).json(&body);
+        if let Some(key) = &self.config.api_key {
+            request = request.bearer_auth(key);
+        }
+        let response = request.send().map_err(|e| LlmError::Http(e.to_string()))?;
 
         if !response.status().is_success() {
             return Err(LlmError::Provider(format!("HTTP {}", response.status())));
@@ -87,15 +86,18 @@ impl OllamaClient {
         let response_text = json
             .get("response")
             .and_then(|r| r.as_str())
-            .unwrap_or("")
+            .filter(|text| !text.trim().is_empty())
+            .ok_or_else(|| LlmError::Parse("missing or empty response field".into()))?
             .to_string();
         Ok(response_text)
     }
 }
 
-pub fn render_prompt(_template: &PromptTemplate, finding: &Finding) -> String {
+pub fn render_prompt(template: &PromptTemplate, finding: &Finding) -> String {
     format!(
-        "Analyze this security finding:\n\nID: {}\nSeverity: {}\nDescription: {}\nFile: {}:{}",
+        "{}\n{}\n\nID: {}\nSeverity: {}\nDescription: {}\nFile: {}:{}",
+        template.system,
+        template.user,
         finding.id,
         finding.severity,
         finding.description,

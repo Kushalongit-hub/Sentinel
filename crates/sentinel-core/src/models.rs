@@ -22,6 +22,20 @@ impl std::fmt::Display for Severity {
     }
 }
 
+impl std::str::FromStr for Severity {
+    type Err = String;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.to_lowercase().as_str() {
+            "info" => Ok(Self::Info),
+            "low" => Ok(Self::Low),
+            "medium" | "warning" => Ok(Self::Medium),
+            "high" | "error" => Ok(Self::High),
+            "critical" => Ok(Self::Critical),
+            _ => Err(format!("unknown severity: {value}")),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
     pub id: String,
@@ -38,6 +52,25 @@ pub struct Finding {
     pub recommendation: String,
 }
 
+impl Finding {
+    pub fn fingerprint(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let path = self.file.to_string_lossy().replace('\\', "/");
+        let key = serde_json::to_vec(&(
+            &path,
+            self.line,
+            &self.category,
+            &self.title,
+            &self.evidence,
+        ))
+        .expect("finding identity is serializable");
+        format!("{:x}", Sha256::digest(key))
+    }
+    pub fn stabilize_id(&mut self) {
+        self.id = self.fingerprint();
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanReport {
     pub findings: Vec<Finding>,
@@ -45,6 +78,9 @@ pub struct ScanReport {
     pub symbols_indexed: usize,
     pub scanners_used: Vec<String>,
     pub duration_ms: u128,
+    pub outcome: ScanOutcome,
+    pub coverage_notes: Vec<String>,
+    pub scanner_results: Vec<ScannerResult>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

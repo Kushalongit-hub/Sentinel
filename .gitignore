@@ -1,5 +1,8 @@
 /target/
-/.sentinel.db
+.sentinel.db
+.sentinel.db-journal
+.sentinel.db-wal
+.sentinel.db-shm
 *.swp
 *.swo
 *~

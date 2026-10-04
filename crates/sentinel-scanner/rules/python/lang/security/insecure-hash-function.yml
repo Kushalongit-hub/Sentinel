@@ -1,26 +1,7 @@
 rules:
   - id: python-insecure-hash-function
-    message: >-
-      Detected use of an insecure MD4 or MD5 hash function.
-      These functions have known vulnerabilities and are considered deprecated.
-      Consider using 'SHA256' or a similar function instead.
-    metadata:
-      cwe:
-        - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
-      references:
-        - https://tools.ietf.org/html/rfc6151
-      category: security
-      technology:
-        - python
-      subcategory:
-        - audit
-      likelihood: LOW
-      impact: MEDIUM
-      confidence: MEDIUM
+    message: Insecure MD4 or MD5 hashing detected; use a modern digest for security decisions.
     languages: [python]
     severity: WARNING
-    patterns:
-      - pattern-either:
-        - pattern: hashlib.new("=~/[M|m][D|d][4|5]/", ...)
-        - pattern: hashlib.new(..., name="=~/[M|m][D|d][4|5]/", ...)
-      - pattern-not: hashlib.new(..., usedforsecurity=False, ...)
+    pattern-regex: '(?i)hashlib\.(?:new\(\s*["'']md[45]["''][^\n)]*\)|md5\([^\n)]*\))'
+    pattern-not-regex: '(?i)hashlib\.(?:new|md5)\([^\n)]*usedforsecurity\s*=\s*False[^\n)]*\)'

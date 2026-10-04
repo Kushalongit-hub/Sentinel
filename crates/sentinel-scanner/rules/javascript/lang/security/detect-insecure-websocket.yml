@@ -1,21 +1,7 @@
 rules:
   - id: javascript-detect-insecure-websocket
-    message: Insecure WebSocket Detected. WebSocket Secure (wss) should be used for all WebSocket connections.
-    metadata:
-      cwe:
-        - 'CWE-319: Cleartext Transmission of Sensitive Information'
-      category: security
-      technology:
-        - regex
-      subcategory:
-        - audit
-      likelihood: LOW
-      impact: MEDIUM
-      confidence: LOW
-    languages:
-      - regex
-    severity: ERROR
-    patterns:
-      - pattern-regex: \bws:\/\/
-      - pattern-not-inside: \bws:\/\/localhost.*
-      - pattern-not-inside: \bws:\/\/127.0.0.1.*
+    message: Insecure remote WebSocket URL detected. Use wss for encrypted connections.
+    languages: [regex]
+    severity: WARNING
+    pattern-regex: '\bws://[^\s"''`)]+'
+    pattern-not-regex: '\bws://(?:localhost|127\.0\.0\.1)(?::[0-9]+)?(?:/[^\s"''`)]*)?(?:[\s"''`)]|$)'

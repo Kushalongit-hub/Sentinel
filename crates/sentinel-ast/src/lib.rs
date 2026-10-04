@@ -3,7 +3,10 @@ use thiserror::Error;
 
 pub mod ast_query;
 
-pub use ast_query::query_pattern;
+pub use ast_query::{
+    compile_pattern, match_context, match_pattern, parse_tree, pattern_spans, query_pattern,
+    validate_tree, MatchSpan,
+};
 
 #[derive(Error, Debug)]
 pub enum AstError {
@@ -64,7 +67,16 @@ static SKIP_EXTENSIONS: &[&str] = &[
 
 pub fn walk(path: &str) -> Result<Vec<FileEntry>> {
     let mut entries = Vec::new();
-    for entry in ignore::Walk::new(path) {
+    for entry in ignore::WalkBuilder::new(path)
+        .filter_entry(|entry| {
+            entry.depth() == 0
+                || !entry.file_type().map(|t| t.is_dir()).unwrap_or(false)
+                || !SKIP_DIRS
+                    .iter()
+                    .any(|name| entry.file_name() == std::ffi::OsStr::new(name))
+        })
+        .build()
+    {
         let entry = entry?;
         if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
             let path_buf = entry.path().to_path_buf();
@@ -103,7 +115,7 @@ pub fn detect_language(path: &std::path::Path) -> Option<String> {
         "py" => Some("python".to_string()),
         "ts" => Some("typescript".to_string()),
         "tsx" => Some("typescript".to_string()),
-        "js" => Some("javascript".to_string()),
+        "js" | "jsx" => Some("javascript".to_string()),
         "rs" => Some("rust".to_string()),
         "go" => Some("go".to_string()),
         _ => None,
@@ -114,6 +126,7 @@ pub struct SymbolExtractor {
     python_parser: std::cell::RefCell<Option<tree_sitter::Parser>>,
     typescript_parser: std::cell::RefCell<Option<tree_sitter::Parser>>,
     rust_parser: std::cell::RefCell<Option<tree_sitter::Parser>>,
+    tsx_parser: std::cell::RefCell<Option<tree_sitter::Parser>>,
 }
 
 impl SymbolExtractor {
@@ -124,17 +137,28 @@ impl SymbolExtractor {
                 &tree_sitter_typescript::language_typescript(),
             )),
             rust_parser: std::cell::RefCell::new(init_parser(&tree_sitter_rust::language())),
+            tsx_parser: std::cell::RefCell::new(init_parser(
+                &tree_sitter_typescript::language_tsx(),
+            )),
         }
     }
 
     pub fn extract(&self, path: &std::path::Path, source: &[u8]) -> Result<Vec<Symbol>> {
         let language = detect_language(path)
             .ok_or_else(|| AstError::Parse("unsupported language".to_string()))?;
-        let parser = match language.as_str() {
-            "python" => &self.python_parser,
-            "typescript" | "javascript" => &self.typescript_parser,
-            "rust" => &self.rust_parser,
-            _ => return Ok(Vec::new()),
+        let parser = if path
+            .extension()
+            .map(|e| e == "tsx" || e == "jsx")
+            .unwrap_or(false)
+        {
+            &self.tsx_parser
+        } else {
+            match language.as_str() {
+                "python" => &self.python_parser,
+                "typescript" | "javascript" => &self.typescript_parser,
+                "rust" => &self.rust_parser,
+                _ => return Ok(Vec::new()),
+            }
         };
         let mut parser = parser.borrow_mut();
         let parser = match parser.as_mut() {
@@ -144,6 +168,7 @@ impl SymbolExtractor {
         let tree = parser
             .parse(source, None)
             .ok_or_else(|| AstError::Parse("parse failed".to_string()))?;
+        validate_tree(&tree)?;
         let root = tree.root_node();
         let mut symbols = Vec::new();
         match language.as_str() {
@@ -182,8 +207,9 @@ fn extract_python_symbols(node: &tree_sitter::Node, source: &[u8], symbols: &mut
                     });
                 }
             }
-            _ => extract_python_symbols(&child, source, symbols),
+            _ => {}
         }
+        extract_python_symbols(&child, source, symbols);
     }
 }
 
@@ -192,7 +218,12 @@ fn extract_typescript_symbols(node: &tree_sitter::Node, source: &[u8], symbols: 
     for child in node.children(&mut cursor) {
         match child.kind() {
             "function_declaration" | "method_definition" | "arrow_function" => {
-                if let Some(name_node) = child.child_by_field_name("name") {
+                if let Some(name_node) = child.child_by_field_name("name").or_else(|| {
+                    child
+                        .parent()
+                        .filter(|p| p.kind() == "variable_declarator")
+                        .and_then(|p| p.child_by_field_name("name"))
+                }) {
                     let text = node_text(source, &name_node);
                     let line = name_node.start_position().row + 1;
                     symbols.push(Symbol {
@@ -224,8 +255,9 @@ fn extract_typescript_symbols(node: &tree_sitter::Node, source: &[u8], symbols: 
                     });
                 }
             }
-            _ => extract_typescript_symbols(&child, source, symbols),
+            _ => {}
         }
+        extract_typescript_symbols(&child, source, symbols);
     }
 }
 
@@ -256,7 +288,7 @@ fn extract_rust_symbols(node: &tree_sitter::Node, source: &[u8], symbols: &mut V
                 }
             }
             "impl_item" => {
-                if let Some(name_node) = child.child_by_field_name("name") {
+                if let Some(name_node) = child.child_by_field_name("type") {
                     let text = node_text(source, &name_node);
                     let line = name_node.start_position().row + 1;
                     symbols.push(Symbol {
@@ -299,8 +331,9 @@ fn extract_rust_symbols(node: &tree_sitter::Node, source: &[u8], symbols: &mut V
                     });
                 }
             }
-            _ => extract_rust_symbols(&child, source, symbols),
+            _ => {}
         }
+        extract_rust_symbols(&child, source, symbols);
     }
 }
 
@@ -345,5 +378,42 @@ mod tests {
         let result = query_pattern(source, "rust", "md5::Md5::new(...)");
         assert!(result.is_ok());
         assert!(result.unwrap(), "call expression should match");
+    }
+}
+#[cfg(test)]
+mod symbol_regressions {
+    use super::*;
+    fn names(path: &str, source: &str) -> Vec<String> {
+        SymbolExtractor::new()
+            .extract(std::path::Path::new(path), source.as_bytes())
+            .unwrap()
+            .into_iter()
+            .map(|s| s.name)
+            .collect()
+    }
+    #[test]
+    fn indexes_class_members_and_nested_functions() {
+        let found = names(
+            "test.py",
+            "class Example:\n    def method(self):\n        def nested():\n            pass\n",
+        );
+        for name in ["Example", "method", "nested"] {
+            assert!(found.iter().any(|n| n == name));
+        }
+    }
+    #[test]
+    fn indexes_impl_methods_and_module_contents() {
+        let found = names(
+            "test.rs",
+            "mod m { struct Example; impl Example { fn method(){fn nested(){}} } }",
+        );
+        for name in ["m", "Example", "method", "nested"] {
+            assert!(found.iter().any(|n| n == name));
+        }
+    }
+    #[test]
+    fn names_arrow_functions_and_handles_tsx() {
+        let found = names("test.tsx", "const Component = () => <div />;");
+        assert!(found.iter().any(|n| n == "Component"));
     }
 }

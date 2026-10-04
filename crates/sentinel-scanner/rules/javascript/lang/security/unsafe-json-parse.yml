@@ -1,25 +1,12 @@
 rules:
   - id: js-unsafe-json-parse
-    message: >-
-      Detected JSON.parse() in the same file as a WebSocket onmessage/ondata handler.
-      Review whether parsed data originates from untrusted network input.
-    metadata:
-      cwe:
-        - "CWE-502: Deserialization of Untrusted Data"
-      references:
-        - https://owasp.org/www-community/vulnerabilities/Deserialization_of_untrusted_data
-      category: security
-      technology:
-        - javascript
-        - websocket
-      subcategory: vuln
-      likelihood: MEDIUM
-      impact: HIGH
-      confidence: MEDIUM
-    languages:
-      - javascript
-      - typescript
+    message: Network input reaches JSON.parse. Validate input size and structure before using the parsed object.
+    languages: [javascript, typescript]
     severity: WARNING
-    patterns:
-      - pattern-regex: JSON\.parse\(
-      - pattern-regex: ws\.on\(['"](message|data)['"]
+    mode: taint
+    pattern-sources:
+      - pattern: req.body
+      - pattern: req.query
+      - pattern: raw.toString()
+    pattern-sinks:
+      - pattern: JSON.parse(

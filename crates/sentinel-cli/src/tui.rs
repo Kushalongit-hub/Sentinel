@@ -8,7 +8,7 @@ pub fn run() -> Result<i32> {
         io::stdout().flush()?;
 
         let mut input = String::new();
-        if io::stdin().read_line(&mut input).is_err() {
+        if io::stdin().read_line(&mut input)? == 0 {
             println!();
             break;
         }

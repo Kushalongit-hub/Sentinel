@@ -19,6 +19,6 @@ jobs:
       - name: Check
         run: cargo check --workspace
       - name: Test
-        run: cargo test --workspace --lib
+        run: cargo test --workspace
       - name: Build binary
         run: cargo build --release --bin sentinel
