@@ -51,6 +51,8 @@ pub struct Editor {
 pub struct App {
     pub project: PathBuf,
     pub view: View,
+    pub navigation_focus: bool,
+    pub navigation_selected: usize,
     pub report: Option<ScanReport>,
     pub rules: Vec<Rule>,
     pub selected: usize,
@@ -80,7 +82,7 @@ impl App {
         let engine = sentinel_scanner::RuleEngine::load_from_embedded_validated()?;
         let mut rules = engine.catalog().cloned().collect::<Vec<_>>();
         rules.sort_by(|a, b| a.id.cmp(&b.id));
-        Ok(Self { project:project.canonicalize()?,view:View::Overview,report:None,rules,selected:0,rule_selected:0,filter:String::new(),scroll:0,provider:0,
+        Ok(Self { project:project.canonicalize()?,view:View::Overview,navigation_focus:true,navigation_selected:0,report:None,rules,selected:0,rule_selected:0,filter:String::new(),scroll:0,provider:0,
             local_model:std::env::var("SENTINEL_LOCAL_MODEL").unwrap_or_else(|_|"llama2".into()),nim_model:std::env::var("SENTINEL_NIM_MODEL").unwrap_or_default(),
             question:"Explain the architecture, entry points, data flow, and testing opportunities. Cite source evidence.".into(),ai_finding:None,
             intelligence_text:"Persistent security intelligence\n\nPress g to index the repository, or w to verify the patch against a saved baseline / Git HEAD.\n\nPress u to inspect imported audit coverage and source freshness. Detailed graph and context queries are available through the repository-bound MCP server.".into(),
@@ -131,6 +133,7 @@ impl App {
         self.status_error = error;
     }
     pub fn open_editor(&mut self, kind: Edit) {
+        self.navigation_focus = false;
         if self.job.is_some() && kind != Edit::Filter {
             self.notify("Wait for the operation, or press Esc to cancel it.", true);
             return;
@@ -211,6 +214,7 @@ impl App {
         if self.job.is_some() {
             anyhow::bail!("an operation is already running; Esc cancels it");
         }
+        self.navigation_focus = false;
         let root = self.root();
         let mut command = Command::new(std::env::current_exe()?);
         command.current_dir(&root);
@@ -470,7 +474,7 @@ impl App {
                 KeyCode::PageDown => self.help_scroll = self.help_scroll.saturating_add(8),
                 KeyCode::PageUp => self.help_scroll = self.help_scroll.saturating_sub(8),
                 KeyCode::Home => self.help_scroll = 0,
-                KeyCode::Char('q') => {
+                KeyCode::Char('q') | KeyCode::Char('Q') => {
                     self.job.take();
                     return true;
                 }
@@ -479,7 +483,7 @@ impl App {
             return false;
         }
         let action: Result<()> = match key.code {
-            KeyCode::Char('q') => {
+            KeyCode::Char('q') | KeyCode::Char('Q') => {
                 self.job.take();
                 return true;
             }
@@ -490,6 +494,10 @@ impl App {
                         false,
                     );
                 } else {
+                    if self.filter.is_empty() {
+                        self.navigation_focus = true;
+                        self.navigation_selected = self.view.index();
+                    }
                     self.filter.clear();
                     self.selected = 0;
                 }
@@ -501,17 +509,19 @@ impl App {
                 Ok(())
             }
             KeyCode::Tab => {
-                self.view = View::from_index(self.view.index() + 1);
-                self.scroll = 0;
+                self.navigation_focus = !self.navigation_focus;
+                self.navigation_selected = self.view.index();
                 Ok(())
             }
             KeyCode::BackTab => {
-                self.view = View::from_index(self.view.index() + 4);
-                self.scroll = 0;
+                self.navigation_focus = !self.navigation_focus;
+                self.navigation_selected = self.view.index();
                 Ok(())
             }
             KeyCode::Char(c @ '1'..='5') => {
                 self.view = View::from_index(c as usize - '1' as usize);
+                self.navigation_selected = self.view.index();
+                self.navigation_focus = false;
                 self.scroll = 0;
                 Ok(())
             }
@@ -580,6 +590,7 @@ impl App {
                 Ok(())
             }
             KeyCode::Char('c') => {
+                self.navigation_focus = false;
                 self.ai_finding = None;
                 self.view = View::Ai;
                 self.scroll = 0;
@@ -607,6 +618,13 @@ impl App {
                 }
             }
             KeyCode::Char('b') if self.view == View::Ai => self.start(Kind::Preview),
+            KeyCode::Enter if self.navigation_focus => {
+                self.view = View::from_index(self.navigation_selected);
+                self.navigation_focus = false;
+                self.scroll = 0;
+                Ok(())
+            }
+            KeyCode::Enter if self.view == View::Overview => self.start(Kind::Audit),
             KeyCode::Enter if self.view == View::Ai => self.start(Kind::Explain),
             KeyCode::Char('s') => {
                 self.open_editor(Edit::ExportJson);
@@ -617,6 +635,10 @@ impl App {
                 Ok(())
             }
             KeyCode::Down | KeyCode::Char('j') => {
+                if self.navigation_focus {
+                    self.navigation_selected = (self.navigation_selected + 1).min(4);
+                    return false;
+                }
                 match self.view {
                     View::Findings => {
                         self.selected =
@@ -634,6 +656,10 @@ impl App {
                 Ok(())
             }
             KeyCode::Up | KeyCode::Char('k') => {
+                if self.navigation_focus {
+                    self.navigation_selected = self.navigation_selected.saturating_sub(1);
+                    return false;
+                }
                 match self.view {
                     View::Findings => self.selected = self.selected.saturating_sub(1),
                     View::Rules => self.rule_selected = self.rule_selected.saturating_sub(1),

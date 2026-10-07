@@ -595,15 +595,20 @@ Existing subcommands and `sentinel --help` remain available.
 
 ![Sentinel terminal workspace](docs/sentinel-tui.png)
 
-The fullscreen Ratatui interface provides five workspaces: Overview, Findings,
-Rule library, AI explain, and Intelligence. Findings pair a selectable severity
+The fullscreen Ratatui interface uses a black marble background, restrained stone
+veins in unused sidebar space, white text, orange actions, and beige metadata.
+Persistent navigation opens five workspaces: Overview, Security findings,
+Rules, AI explain, and Investigation. Findings pair a selectable severity
 list with location, confidence, execution path, evidence and remediation. The
-Intelligence view shows persistent index statistics and patch verdicts. Operations
+Investigation view shows persistent index statistics and patch verdicts. The
+overview distinguishes an unscanned project, incomplete coverage, findings needing
+review, and no findings within the scanned scope. Operations
 run in cancellable background processes, keeping navigation responsive.
 
 | Key | Action |
 | --- | --- |
-| Tab / Shift+Tab / 1-5 | Switch views |
+| Tab / Shift+Tab | Switch between navigation and workspace focus |
+| Arrows + Enter / 1-5 | Choose and open a section / open directly |
 | a / d | Audit project / scan Git changes |
 | g / w | Index security graph / verify patch |
 | u | Inspect imported audit coverage, review verdicts and source freshness |
@@ -615,7 +620,7 @@ run in cancellable background processes, keeping navigation responsive.
 | e / c | Explain selected finding / explain codebase |
 | m / i / l / n | Provider / question / local model / NIM model |
 | b / Enter in AI view | Preview shared context / request explanation |
-| ? / Esc / q | Help / close or cancel / quit |
+| ? / Esc / q or Q | Help / close, cancel, or return to navigation / quit |
 
 Local, NIM, and both are explicit choices with identical shared evidence in both
 mode and no automatic fallback. AI output remains advisory. Resize support includes

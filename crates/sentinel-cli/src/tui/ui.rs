@@ -1,16 +1,15 @@
 use super::app::{safe, App, View};
 use ratatui::{prelude::*, widgets::*};
-const BG: Color = Color::Rgb(12, 18, 30);
-const PANEL: Color = Color::Rgb(18, 27, 43);
-const BORDER: Color = Color::Rgb(45, 61, 82);
-const TEXT: Color = Color::Rgb(222, 232, 241);
-const MUTED: Color = Color::Rgb(133, 154, 177);
-const CYAN: Color = Color::Rgb(91, 211, 229);
-const MINT: Color = Color::Rgb(128, 224, 174);
-const RED: Color = Color::Rgb(248, 129, 140);
+const BG: Color = Color::Rgb(8, 8, 8);
+const PANEL: Color = Color::Rgb(8, 8, 8);
+const BORDER: Color = Color::Rgb(115, 109, 99);
+const TEXT: Color = Color::Rgb(239, 236, 228);
+const MUTED: Color = Color::Rgb(166, 153, 130);
+const ORANGE: Color = Color::Rgb(222, 140, 71);
+const RISK: Color = Color::Rgb(236, 155, 89);
 fn panel(title: impl Into<String>) -> Block<'static> {
     Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(BorderType::Plain)
         .title(format!(" {} ", title.into()))
         .border_style(Style::new().fg(BORDER))
         .style(Style::new().bg(PANEL).fg(TEXT))
@@ -27,9 +26,9 @@ fn paragraph(frame: &mut Frame, area: Rect, title: &str, text: impl Into<String>
 fn severity(s: sentinel_core::Severity) -> Color {
     use sentinel_core::Severity::*;
     match s {
-        Critical | High => RED,
-        Medium => Color::Rgb(247, 201, 119),
-        Low => CYAN,
+        Critical | High => RISK,
+        Medium => Color::Rgb(222, 140, 71),
+        Low => TEXT,
         Info => MUTED,
     }
 }
@@ -47,14 +46,23 @@ pub fn draw(frame: &mut Frame, app: &App) {
     ])
     .margin(1)
     .split(area);
-    let header = Line::from(vec![
-        Span::styled(" SENTINEL ", Style::new().fg(CYAN).bold()),
-        Span::styled(" / SECURITY WORKSPACE   ", Style::new().fg(MUTED)),
-        Span::styled(
-            safe(app.project.to_string_lossy().trim_start_matches(r"\\?\")),
-            Style::new().fg(TEXT),
+    let state = match &app.report {
+        None => "NOT SCANNED",
+        Some(r) if r.outcome != sentinel_core::ScanOutcome::Complete => "INCOMPLETE COVERAGE",
+        Some(r) if !r.findings.is_empty() => "REVIEW REQUIRISK",
+        Some(_) => "NO FINDINGS IN SCOPE",
+    };
+    let header = vec![
+        Line::from(vec![
+            Span::styled(" SENTINEL", Style::new().fg(TEXT).bold()),
+            Span::styled(" / LOCAL SECURITY CONSOLE", Style::new().fg(MUTED)),
+            Span::styled(format!("    {state}"), Style::new().fg(ORANGE)),
+        ]),
+        Line::styled(
+            format!(" {}", safe(&app.project.to_string_lossy())),
+            Style::new().fg(MUTED),
         ),
-    ]);
+    ];
     frame.render_widget(
         Paragraph::new(header).block(
             Block::new()
@@ -75,41 +83,39 @@ pub fn draw(frame: &mut Frame, app: &App) {
         View::Intelligence => paragraph(
             frame,
             columns[1],
-            "Security graph / verification / audit coverage",
+            "Security graph / verification / audit coverage / audit coverage",
             app.intelligence_text.clone(),
             app.scroll,
         ),
     }
-    let indicator = if app.job.is_some() {
-        ["|", "/", "-", "\\"][app.tick % 4]
+    let actions = if app.job.is_some() {
+        "Esc cancel"
     } else {
-        "*"
+        match app.view {
+            View::Overview => "a audit / p project",
+            View::Findings => "/ search / e explain / s export",
+            View::Rules => "arrows select rule",
+            View::Ai => "m provider / b preview / Enter ask",
+            View::Intelligence => "g index / w verify / u coverage",
+        }
     };
-    let footer = vec![
-        Line::from(vec![
-            Span::styled(
-                format!(" {indicator} "),
-                Style::new().fg(if app.status_error { RED } else { MINT }),
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::styled(
+                format!(" {}", safe(&app.status)),
+                Style::new().fg(if app.status_error { ORANGE } else { TEXT }),
             ),
-            Span::styled(
-                safe(&app.status),
-                Style::new().fg(if app.status_error { RED } else { TEXT }),
+            Line::styled(
+                format!(" Arrows navigate / Enter open / Tab focus / {actions} / ? help / Q quit"),
+                Style::new().fg(MUTED),
             ),
         ]),
-        Line::styled(
-            if app.job.is_some() {
-                " Esc cancel | Tab views | ? help | q quit"
-            } else {
-                " Tab views | a audit d diff | g index w verify u audit | ? help | q quit"
-            },
-            Style::new().fg(MUTED),
-        ),
-    ];
-    frame.render_widget(Paragraph::new(footer), rows[2]);
+        rows[2],
+    );
     if app.help {
         let modal = centered(area, 82, 25);
         frame.render_widget(Clear, modal);
-        paragraph(frame,modal,"Keyboard guide","NAVIGATE\n  Tab / Shift+Tab or 1-5     Change workspace\n  j / k or arrows            Select finding / rule; scroll evidence\n  PgUp / PgDn / Home         Scroll detail / reset\n\nSECURITY\n  a Audit   d Git diff   g Index graph   w Verify patch   u Audit coverage\n  / Filter findings   p Project path   t Severity threshold\n  x External scanners   v Semgrep config   s JSON export   S SARIF export\n\nAI EXPLANATIONS\n  e Explain selected finding   c Explain codebase\n  m Local / NVIDIA NIM / both   i Question   l Local model   n NIM model\n  b Preview identical shared context   Enter Submit explanation\n\n  Esc Close / cancel operation    Ctrl+C / q Quit\n  Exports create new files. Cloud submission sends the previewed context.\n  ? or Esc closes. Arrows / PgUp / PgDn scroll.",app.help_scroll);
+        paragraph(frame,modal,"Keyboard guide","NAVIGATE\n  Tab / Shift+Tab           Switch focus\n  Arrows + Enter             Choose and open section\n  1-5                        Open section directly\n  j / k or arrows            Select finding / rule; scroll evidence\n  PgUp / PgDn / Home         Scroll detail / reset\n\nSECURITY\n  a Audit   d Git diff   g Index graph   w Verify patch   u Audit coverage\n  / Filter findings   p Project path   t Severity threshold\n  x External scanners   v Semgrep config   s JSON export   S SARIF export\n\nAI EXPLANATIONS\n  e Explain selected finding   c Explain codebase\n  m Local / NVIDIA NIM / both   i Question   l Local model   n NIM model\n  b Preview identical shared context   Enter Submit explanation\n\n  Esc Close / cancel operation    Ctrl+C / q Quit\n  Exports create new files. Cloud submission sends the previewed context.\n  ? or Esc closes. Arrows / PgUp / PgDn scroll.",app.help_scroll);
     }
     if let Some(editor) = &app.editor {
         let modal = centered(area, 76, 7);
@@ -149,101 +155,147 @@ fn centered(area: Rect, width: u16, height: u16) -> Rect {
         height,
     )
 }
+/// Deterministic branching contours, restricted to unused sidebar space.
+fn marble(frame: &mut Frame, area: Rect) {
+    if area.width < 5 || area.height < 4 {
+        return;
+    }
+    for y in 0..area.height {
+        let position = |row: u16| {
+            (area.width as f32 * 0.25 + row as f32 * 0.32 + (row as f32 * 0.28).sin() * 1.4)
+                .clamp(0.0, (area.width - 1) as f32) as u16
+        };
+        let x = position(y);
+        let previous = position(y.saturating_sub(1));
+        let glyph = match x.cmp(&previous) {
+            std::cmp::Ordering::Greater => "╲",
+            std::cmp::Ordering::Less => "╱",
+            std::cmp::Ordering::Equal => "│",
+        };
+        frame.buffer_mut()[(area.x + x, area.y + y)]
+            .set_symbol(glyph)
+            .set_fg(Color::Rgb(43, 41, 37));
+        if y > area.height / 2 {
+            let branch = x.saturating_sub((y - area.height / 2) / 2 + 1);
+            frame.buffer_mut()[(area.x + branch, area.y + y)]
+                .set_symbol(if y % 2 == 0 { "╱" } else { "│" })
+                .set_fg(Color::Rgb(29, 28, 25));
+        }
+    }
+}
 fn navigation(frame: &mut Frame, area: Rect, app: &App) {
-    let rows = Layout::vertical([Constraint::Length(9), Constraint::Min(1)])
-        .spacing(1)
-        .split(area);
+    let block = panel(if app.navigation_focus {
+        "SECTIONS / FOCUS"
+    } else {
+        "SECTIONS"
+    });
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
     let items = [
-        "1  Overview",
-        "2  Findings",
-        "3  Rule library",
-        "4  AI explain",
-        "5  Intelligence",
+        "Overview",
+        "Security findings",
+        "Rules",
+        "AI explain",
+        "Investigation",
     ]
     .iter()
     .enumerate()
     .map(|(i, label)| {
-        ListItem::new(*label).style(if i == app.view.index() {
-            Style::new().fg(CYAN).bold()
+        let selected = if app.navigation_focus {
+            app.navigation_selected == i
         } else {
-            Style::new().fg(MUTED)
-        })
+            app.view.index() == i
+        };
+        ListItem::new(format!("{} {}", if selected { ">" } else { " " }, label)).style(
+            if selected {
+                Style::new().fg(ORANGE).bold()
+            } else {
+                Style::new().fg(MUTED)
+            },
+        )
     })
     .collect::<Vec<_>>();
-    frame.render_widget(List::new(items).block(panel("WORKSPACE")), rows[0]);
-    let mode = if app.external { "Enabled" } else { "Off" };
-    let state = if app.job.is_some() {
-        "Working"
-    } else {
-        "Ready"
-    };
-    paragraph(frame,rows[1],"SESSION",format!("{state}\n\nExit threshold\n{}\n\nExternal scanners\n{mode}\n\nAI provider\n{}\n\nLocal-first\nDeterministic scans\nAI is advisory",app.threshold,app.provider_name()),0);
-}
-fn overview(frame: &mut Frame, area: Rect, app: &App) {
-    let rows = Layout::vertical([
-        Constraint::Length(5),
-        Constraint::Length(5),
-        Constraint::Min(1),
-    ])
-    .spacing(1)
-    .split(area);
-    let headline = vec![
-        Line::styled(
-            " Know the risk. Follow the evidence.",
-            Style::new().fg(CYAN).bold(),
-        ),
-        Line::from(" A local security workspace for your code and coding agents."),
-        Line::styled(
-            " Audit -> inspect -> trace -> verify",
-            Style::new().fg(MUTED),
-        ),
-    ];
     frame.render_widget(
-        Paragraph::new(headline).block(panel("PROJECT OVERVIEW")),
-        rows[0],
+        List::new(items),
+        Rect::new(inner.x, inner.y + 1, inner.width, 5.min(inner.height)),
     );
-    let cards = Layout::horizontal([Constraint::Ratio(1, 3); 3])
-        .spacing(1)
-        .split(rows[1]);
-    let count = app.report.as_ref().map(|r| r.findings.len()).unwrap_or(0);
-    let high = app
-        .report
-        .as_ref()
-        .map(|r| {
-            r.findings
-                .iter()
-                .filter(|f| f.severity >= sentinel_core::Severity::High)
-                .count()
-        })
-        .unwrap_or(0);
-    let files = app.report.as_ref().map(|r| r.files_scanned).unwrap_or(0);
-    for (index, (label, value, color)) in [
-        ("FINDINGS", count, CYAN),
-        ("HIGH / CRITICAL", high, RED),
-        ("FILES SCANNED", files, MINT),
-    ]
-    .into_iter()
-    .enumerate()
-    {
+    if inner.height > 13 {
+        marble(
+            frame,
+            Rect::new(
+                inner.x + 1,
+                inner.y + 8,
+                inner.width.saturating_sub(2),
+                inner.height.saturating_sub(12),
+            ),
+        );
         frame.render_widget(
-            Paragraph::new(format!("{value}\n{label}"))
-                .style(Style::new().fg(color).bold())
-                .alignment(Alignment::Center)
-                .block(panel("")),
-            cards[index],
+            Paragraph::new(format!("LOCAL FIRST\nProvider: {}", app.provider_name()))
+                .style(Style::new().fg(MUTED)),
+            Rect::new(inner.x, inner.y + inner.height - 3, inner.width, 2),
         );
     }
-    let (coverage,notes)=app.report.as_ref().map(|r|(format!("{:?}",r.outcome),r.coverage_notes.join("\n"))).unwrap_or_else(||("Not scanned".into(),"Press a to audit the project. Results will appear in Findings.\nPress g to build its security graph, then w to verify changes.\n\nUse the AI view to explain the codebase with local, cloud, or both providers. Preview the shared evidence before submitting.".into()));
-    paragraph(
-        frame,
-        rows[2],
-        &format!("Coverage: {coverage}"),
-        format!(
-            "{} embedded rules available\n\n{}",
-            app.rules.len(),
-            safe(&notes)
+}
+fn overview(frame: &mut Frame, area: Rect, app: &App) {
+    let mut lines = vec![
+        Line::styled("SECURITY SUMMARY", Style::new().fg(TEXT).bold()),
+        Line::from(""),
+    ];
+    if let Some(r) = &app.report {
+        let high = r
+            .findings
+            .iter()
+            .filter(|f| f.severity >= sentinel_core::Severity::High)
+            .count();
+        for (label, value) in [
+            ("Scan coverage", format!("{:?}", r.outcome)),
+            ("Findings", r.findings.len().to_string()),
+            ("High / critical", high.to_string()),
+            ("Files scanned", r.files_scanned.to_string()),
+        ] {
+            lines.push(Line::from(vec![
+                Span::styled(format!("{label:<20}"), Style::new().fg(MUTED)),
+                Span::styled(value, Style::new().fg(TEXT)),
+            ]));
+        }
+        lines.push(Line::from(""));
+        lines.push(Line::styled(
+            "Results concern supported scope; absence is not proof of safety.",
+            Style::new().fg(MUTED),
+        ));
+        for note in r.coverage_notes.iter().take(3) {
+            lines.push(Line::styled(safe(note), Style::new().fg(ORANGE)));
+        }
+    } else {
+        lines.extend([
+            Line::styled("Not scanned", Style::new().fg(ORANGE)),
+            Line::from("Run an audit to inspect this project's supported code."),
+            Line::from("No security assessment is available yet."),
+        ]);
+    }
+    lines.extend([
+        Line::from(""),
+        Line::styled("NEXT ACTION", Style::new().fg(ORANGE)),
+        Line::from("a  Audit project    d  Inspect changes"),
+        Line::from("g  Index code       w  Verify patch"),
+        Line::from("c  Explain codebase p  Change project"),
+        Line::from(""),
+        Line::styled(
+            format!(
+                "{} embedded rules / external scanners {} / threshold {}",
+                app.rules.len(),
+                if app.external { "enabled" } else { "off" },
+                app.threshold
+            ),
+            Style::new().fg(MUTED),
         ),
-        app.scroll,
+    ]);
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(panel("OVERVIEW"))
+            .wrap(Wrap { trim: false })
+            .scroll((app.scroll, 0)),
+        area,
     );
 }
 fn findings(frame: &mut Frame, area: Rect, app: &App) {
@@ -286,7 +338,7 @@ fn findings(frame: &mut Frame, area: Rect, app: &App) {
             .style(Style::new().fg(MUTED))
             .bottom_margin(1),
     )
-    .row_highlight_style(Style::new().bg(Color::Rgb(32, 56, 75)).fg(TEXT))
+    .row_highlight_style(Style::new().bg(Color::Rgb(43, 30, 20)).fg(TEXT))
     .highlight_symbol("> ")
     .block(panel(format!(
         "Findings {} / filter: {}",
@@ -318,7 +370,7 @@ fn rules(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_stateful_widget(
         List::new(items)
             .block(panel(format!("Embedded rules ({})", app.rules.len())))
-            .highlight_style(Style::new().bg(Color::Rgb(32, 56, 75)).fg(CYAN))
+            .highlight_style(Style::new().bg(Color::Rgb(43, 30, 20)).fg(ORANGE))
             .highlight_symbol("> "),
         areas[0],
         &mut state,
@@ -369,7 +421,7 @@ mod tests {
     #[test]
     fn workspace_draws_each_view_and_resizes_without_panics() {
         let mut app = App::new(std::env::current_dir().unwrap()).unwrap();
-        for (width, height) in [(120, 38), (80, 24), (65, 18), (40, 12)] {
+        for (width, height) in [(160, 50), (120, 38), (80, 24), (65, 18), (40, 12)] {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             for view in [
                 View::Overview,
@@ -409,6 +461,27 @@ mod tests {
             )
             .unwrap();
         }
+    }
+    #[test]
+    fn navigation_requires_selection_and_returns_focus_on_escape() {
+        let mut app = App::new(std::env::current_dir().unwrap()).unwrap();
+        let key = |code| KeyEvent::new(code, KeyModifiers::NONE);
+        assert!(app.navigation_focus);
+        app.key(key(KeyCode::Down));
+        assert_eq!(app.view, View::Overview);
+        assert_eq!(app.navigation_selected, 1);
+        app.key(key(KeyCode::Enter));
+        assert_eq!(app.view, View::Findings);
+        assert!(!app.navigation_focus);
+        app.key(key(KeyCode::Tab));
+        assert!(app.navigation_focus);
+        app.key(key(KeyCode::Char('/')));
+        assert!(!app.navigation_focus);
+        assert!(app.editor.is_some());
+        app.key(key(KeyCode::Esc));
+        app.key(key(KeyCode::Esc));
+        assert!(app.navigation_focus);
+        assert!(app.key(key(KeyCode::Char('Q'))));
     }
     #[test]
     fn keyboard_selection_provider_and_editor_sanitize_paste() {
