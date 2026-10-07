@@ -83,7 +83,7 @@ impl App {
         Ok(Self { project:project.canonicalize()?,view:View::Overview,report:None,rules,selected:0,rule_selected:0,filter:String::new(),scroll:0,provider:0,
             local_model:std::env::var("SENTINEL_LOCAL_MODEL").unwrap_or_else(|_|"llama2".into()),nim_model:std::env::var("SENTINEL_NIM_MODEL").unwrap_or_default(),
             question:"Explain the architecture, entry points, data flow, and testing opportunities. Cite source evidence.".into(),ai_finding:None,
-            intelligence_text:"Persistent security intelligence\n\nPress g to index the repository, or w to verify the patch against a saved baseline / Git HEAD.\n\nDetailed graph and context queries are available through the repository-bound MCP server.".into(),
+            intelligence_text:"Persistent security intelligence\n\nPress g to index the repository, or w to verify the patch against a saved baseline / Git HEAD.\n\nPress u to inspect imported audit coverage and source freshness. Detailed graph and context queries are available through the repository-bound MCP server.".into(),
             ai_text:"Your code, explained.\n\nChoose a provider, inspect the shared context, and ask a question.\n\nLocal runs only Ollama. Cloud runs only NVIDIA NIM. Both runs them concurrently on identical evidence.\n\nAI answers are advisory and do not change scan findings.".into(),external:false,semgrep:String::new(),threshold:Severity::Info,editor:None,help:false,help_scroll:0,
             status:"Ready. Press a to audit this project, or ? for the keyboard guide.".into(),status_error:false,job:None,tick:0 })
     }
@@ -234,6 +234,9 @@ impl App {
                     command.arg("--semgrep-config").arg(&self.semgrep);
                 }
             }
+            Kind::AuditStatus => {
+                command.arg("audit-workflow").arg("status").arg(&root);
+            }
             Kind::Index | Kind::Verify => {
                 command
                     .arg(if matches!(kind, Kind::Index) {
@@ -285,6 +288,7 @@ impl App {
                 Kind::Preview => "Building shared context preview...",
                 Kind::Index => "Indexing security graph...",
                 Kind::Verify => "Verifying patch...",
+                Kind::AuditStatus => "Loading audit coverage and source freshness...",
             },
             false,
         );
@@ -292,7 +296,7 @@ impl App {
     }
     fn complete(&mut self, completed: Completed) -> Result<()> {
         match completed.kind {
-            Kind::Index | Kind::Verify => {
+            Kind::Index | Kind::Verify | Kind::AuditStatus => {
                 let value: serde_json::Value = serde_json::from_slice(&completed.stdout)
                     .with_context(|| {
                         format!("Security operation failed: {}", safe(&completed.stderr))
@@ -513,6 +517,7 @@ impl App {
             }
             KeyCode::Char('g') => self.start(Kind::Index),
             KeyCode::Char('w') => self.start(Kind::Verify),
+            KeyCode::Char('u') => self.start(Kind::AuditStatus),
             KeyCode::Char('a') => self.start(Kind::Audit),
             KeyCode::Char('d') => self.start(Kind::Diff),
             KeyCode::Char('p') => {

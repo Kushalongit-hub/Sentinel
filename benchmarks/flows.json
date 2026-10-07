@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled development flow cases; independent review pending",
+  "cases": [
+    {
+      "id": "python-layered-sql-positive",
+      "family": "python-layered-sql",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "from service import create_user\ndef handler(request):\n    name = request.args['name']\n    return create_user(name)\n",
+        "service.py": "from repository import insert_user\ndef create_user(name):\n    return insert_user(name)\n",
+        "repository.py": "def insert_user(value):\n    cursor.execute('SELECT ' + value)\n"
+      },
+      "rationale": "Untrusted input reaches a dangerous sink across local imports"
+    },
+    {
+      "id": "python-layered-sql-safe",
+      "family": "python-layered-sql",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "from service import create_user\ndef handler(request):\n    name = request.args['name']\n    return create_user(name)\n",
+        "service.py": "from repository import insert_user\ndef create_user(name):\n    return insert_user(name)\n",
+        "repository.py": "def insert_user(value):\n    cursor.execute('SELECT ?', [value])\n"
+      },
+      "rationale": "Parameterization, category-specific escaping or fixed input breaks the unsafe flow"
+    },
+    {
+      "id": "typescript-layered-xss-positive",
+      "family": "typescript-layered-xss",
+      "split": "development",
+      "class": "xss",
+      "positive": true,
+      "rules": [
+        "interproc-xss"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.ts",
+      "files": {
+        "renderer.ts": "export function render(value) { res.send(value); }\n",
+        "routes.ts": "import { render } from './renderer';\nfunction handle(req) { return render(req.query.name); }\n"
+      },
+      "rationale": "Untrusted input reaches a dangerous sink across local imports"
+    },
+    {
+      "id": "typescript-layered-xss-safe",
+      "family": "typescript-layered-xss",
+      "split": "development",
+      "class": "xss",
+      "positive": false,
+      "rules": [
+        "interproc-xss"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.ts",
+      "files": {
+        "renderer.ts": "export function render(value) { res.send(value); }\n",
+        "routes.ts": "import { render } from './renderer';\nfunction handle(req) { return render(escapeHtml(req.query.name)); }\n"
+      },
+      "rationale": "Parameterization, category-specific escaping or fixed input breaks the unsafe flow"
+    },
+    {
+      "id": "javascript-layered-path-positive",
+      "family": "javascript-layered-path",
+      "split": "development",
+      "class": "path-traversal",
+      "positive": true,
+      "rules": [
+        "interproc-path-traversal"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "files.js": "export function read(value) { return readFileSync(value); }\n",
+        "routes.js": "import { read } from './files';\nfunction route(req) { return read(req.query.file); }\n"
+      },
+      "rationale": "Untrusted input reaches a dangerous sink across local imports"
+    },
+    {
+      "id": "javascript-layered-path-safe",
+      "family": "javascript-layered-path",
+      "split": "development",
+      "class": "path-traversal",
+      "positive": false,
+      "rules": [
+        "interproc-path-traversal"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "files.js": "export function read(value) { return readFileSync(value); }\n",
+        "routes.js": "import { read } from './files';\nfunction route(req) { return read('public.txt'); }\n"
+      },
+      "rationale": "Parameterization, category-specific escaping or fixed input breaks the unsafe flow"
+    },
+    {
+      "id": "python-layered-command-positive",
+      "family": "python-layered-command",
+      "split": "development",
+      "class": "command-injection",
+      "positive": true,
+      "rules": [
+        "interproc-command-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "worker.py": "import os\ndef execute(value):\n    return os.system(value)\n",
+        "routes.py": "from worker import execute\ndef route(request):\n    return execute(request.args['command'])\n"
+      },
+      "rationale": "Untrusted input reaches a dangerous sink across local imports"
+    },
+    {
+      "id": "python-layered-command-safe",
+      "family": "python-layered-command",
+      "split": "development",
+      "class": "command-injection",
+      "positive": false,
+      "rules": [
+        "interproc-command-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "worker.py": "import os\ndef execute(value):\n    return os.system(value)\n",
+        "routes.py": "from worker import execute\ndef route(request):\n    return execute('echo fixed')\n"
+      },
+      "rationale": "Parameterization, category-specific escaping or fixed input breaks the unsafe flow"
+    }
+  ]
+}

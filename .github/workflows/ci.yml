@@ -6,19 +6,33 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Check
-        run: cargo check --workspace
+        run: cargo check --locked --workspace
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --locked --workspace
       - name: Build binary
-        run: cargo build --release --bin sentinel
+        run: cargo build --locked --release --bin sentinel
+      - name: Check benchmark scoring and corpus validation
+        run: python -m unittest discover -s scripts -p "test_benchmark.py"
+      - name: Measure development seed corpus
+        run: python scripts/benchmark.py --binary target/release/sentinel.exe --output "$env:RUNNER_TEMP/sentinel-benchmark.json"
+      - name: Measure multi-file flow corpus
+        run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/flows.json --output "$env:RUNNER_TEMP/sentinel-flows.json"
+      - name: Measure request-source corpus
+        run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/framework-sources.json --output "$env:RUNNER_TEMP/sentinel-framework-sources.json"

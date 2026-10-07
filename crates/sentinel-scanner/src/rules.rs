@@ -12,6 +12,10 @@ use std::{
 };
 use thiserror::Error;
 include!(concat!(env!("OUT_DIR"), "/embedded_rules.rs"));
+/// Identifies the exact embedded rule assets rather than only their count.
+pub fn embedded_rule_set_id() -> String {
+    sentinel_core::security::identity(embedded_rules())
+}
 #[derive(Error, Debug)]
 pub enum RuleError {
     #[error("IO error: {0}")]
@@ -522,6 +526,24 @@ mod tests {
     fn every_bundled_rule_has_positive_and_negative_fixtures() {
         let engine = RuleEngine::load_from_embedded_validated().unwrap();
         let fixtures = [
+            (
+                "python-debug-server",
+                "python",
+                "app.run(debug=True)",
+                "app.run(debug=False)",
+            ),
+            (
+                "javascript-permissive-cors",
+                "javascript",
+                "app.use(cors({origin: true, credentials: true}));",
+                "app.use(cors({origin: ['https://trusted.example']}));",
+            ),
+            (
+                "javascript-jwt-decode-unverified",
+                "javascript",
+                "const claims=jwt.decode(token);",
+                "const claims=jwt.verify(token, key);",
+            ),
             (
                 "rust-unsafe-usage",
                 "rust",

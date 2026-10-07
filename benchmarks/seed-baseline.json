@@ -1,0 +1,388 @@
+{
+  "schema_version": 1,
+  "corpus_sha256": "7ae136ca2f9f35e9f6727227c1a4523407a25652515e74662ad9c2ea41011865",
+  "binary_sha256": "535db8519519d0cde267393e5d7dc21866e913f38ceb9ac57fd6a1910cd5ed9e",
+  "split": "development",
+  "scope": "case-level detection of mapped rules; additional findings are unscored",
+  "summary": {
+    "tp": 7,
+    "fp": 0,
+    "tn": 7,
+    "fn": 0,
+    "failed": 0,
+    "precision": {
+      "value": 1.0,
+      "wilson_95": [
+        0.6456695649333126,
+        1.0
+      ],
+      "denominator": 7
+    },
+    "recall": {
+      "value": 1.0,
+      "wilson_95": [
+        0.6456695649333126,
+        1.0
+      ],
+      "denominator": 7
+    },
+    "complete_cases": 14,
+    "total_cases": 14
+  },
+  "per_class": {
+    "debug-server": {
+      "tp": 1,
+      "fp": 0,
+      "tn": 1,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "complete_cases": 2,
+      "total_cases": 2
+    },
+    "dynamic-execution": {
+      "tp": 2,
+      "fp": 0,
+      "tn": 2,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "complete_cases": 4,
+      "total_cases": 4
+    },
+    "tls-verification": {
+      "tp": 2,
+      "fp": 0,
+      "tn": 2,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "complete_cases": 4,
+      "total_cases": 4
+    },
+    "weak-hash": {
+      "tp": 2,
+      "fp": 0,
+      "tn": 2,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "complete_cases": 4,
+      "total_cases": 4
+    }
+  },
+  "cases": [
+    {
+      "id": "python-md5-positive",
+      "family": "python-md5",
+      "class": "weak-hash",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "a2fe9fc9e0b39b1d51a77bae14bfcbb69bd2f5ba6594526fa4abbd0c1aea271e",
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "python-insecure-hash-function",
+          "line": 2,
+          "severity": "Medium"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 1962.7790999948047
+    },
+    {
+      "id": "python-md5-safe",
+      "family": "python-md5",
+      "class": "weak-hash",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "c403cbd0d652aea3ee1ab16347ede4e0bda63f06dd88bd741f4eebca77d905d3",
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 47.34779999125749
+    },
+    {
+      "id": "python-tls-positive",
+      "family": "python-tls",
+      "class": "tls-verification",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "08ae740662ca7579f271b22f6619734fd4b81d9bfb181ea405d830f2031d326d",
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "python-unverified-ssl-context",
+          "line": 2,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 41.95349999645259
+    },
+    {
+      "id": "python-tls-safe",
+      "family": "python-tls",
+      "class": "tls-verification",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "7e8cb836e98925efedf4f0cb4756bb66d9020b5635b220bdadb60b8b960a6209",
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 36.344399995869026
+    },
+    {
+      "id": "python-debug-positive",
+      "family": "python-debug",
+      "class": "debug-server",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "7f771cabf3a6d06179293df21b90c88ed9ecabd5c623b538474c741858ce72a4",
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "python-debug-server",
+          "line": 3,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 32.88830000383314
+    },
+    {
+      "id": "python-debug-safe",
+      "family": "python-debug",
+      "class": "debug-server",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "be8add5f4baf17866c51e2a7224fed7aed4db0755dc55d498eee87700037d2c9",
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 45.79100001137704
+    },
+    {
+      "id": "javascript-eval-positive",
+      "family": "javascript-eval",
+      "class": "dynamic-execution",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "6a117b1b3a5658a5e55eb6798e1aa9154168824eb6779e008b324e1c7709c5f0",
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "javascript-detect-eval-with-expression",
+          "line": 2,
+          "severity": "Medium"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 54.222299993853085
+    },
+    {
+      "id": "javascript-eval-safe",
+      "family": "javascript-eval",
+      "class": "dynamic-execution",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "58f29f9040249335edb0b47f498c1dab0aac13acc0d2c644f5cb1f50c2e5a98a",
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 47.769299999345094
+    },
+    {
+      "id": "typescript-eval-positive",
+      "family": "typescript-eval",
+      "class": "dynamic-execution",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "6f355673c355632ccac150a2503572d23b2a92ccac5359738dcac71a7594c1ac",
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "javascript-detect-eval-with-expression",
+          "line": 2,
+          "severity": "Medium"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 48.08890000276733
+    },
+    {
+      "id": "typescript-eval-safe",
+      "family": "typescript-eval",
+      "class": "dynamic-execution",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "ae8ec800fcc2b0b0decdc42874d83dcef4c5855b7fe8c466d47450e69a006dbe",
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 31.76779999921564
+    },
+    {
+      "id": "rust-tls-positive",
+      "family": "rust-tls",
+      "class": "tls-verification",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "acd6fd5bcb21ec26aadf56d58a376a246577ceeb52bac666c6b7eee04c7e1d89",
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "rust-reqwest-accept-invalid",
+          "line": 1,
+          "severity": "Medium"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 51.82049999712035
+    },
+    {
+      "id": "rust-tls-safe",
+      "family": "rust-tls",
+      "class": "tls-verification",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "cadd6f1a7380e8c7f1c59669708ba4d05588704f44a3c6aa4a5764b7abc32922",
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 34.03519999119453
+    },
+    {
+      "id": "rust-hash-positive",
+      "family": "rust-hash",
+      "class": "weak-hash",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "a11fd9e0d06e619ac0c1eb5c3bd57dad4f3966f71fa2e73580d56a09907055a7",
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "rust-insecure-hashes",
+          "line": 1,
+          "severity": "Medium"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 44.5804000046337
+    },
+    {
+      "id": "rust-hash-safe",
+      "family": "rust-hash",
+      "class": "weak-hash",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "e5f1bc3d568ad2cc560fa678691e50386a44dde2d905fd61bf4dbd595ed8f939",
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 47.42380000243429
+    }
+  ]
+}

@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "corpus_sha256": "89b87a3e47392f68083b46c47aaf5a0241fd5a765b73335793a195b813a0df48",
+  "binary_sha256": "e3ad4ba6365b76d6a188357a0b68c7a2e97240a18a9cc24f722500d176ba1a96",
+  "split": "development",
+  "scope": "case-level detection of mapped rules; additional findings are unscored",
+  "summary": {
+    "tp": 0,
+    "fp": 0,
+    "tn": 2,
+    "fn": 2,
+    "failed": 0,
+    "precision": {
+      "value": null,
+      "wilson_95": null,
+      "denominator": 0
+    },
+    "recall": {
+      "value": 0.0,
+      "wilson_95": [
+        0.0,
+        0.6576197724933469
+      ],
+      "denominator": 2
+    },
+    "complete_cases": 4,
+    "total_cases": 4
+  },
+  "per_class": {
+    "path-traversal": {
+      "tp": 0,
+      "fp": 0,
+      "tn": 1,
+      "fn": 1,
+      "failed": 0,
+      "precision": {
+        "value": null,
+        "wilson_95": null,
+        "denominator": 0
+      },
+      "recall": {
+        "value": 0.0,
+        "wilson_95": [
+          0.0,
+          0.7934506856227626
+        ],
+        "denominator": 1
+      },
+      "complete_cases": 2,
+      "total_cases": 2
+    },
+    "sql-injection": {
+      "tp": 0,
+      "fp": 0,
+      "tn": 1,
+      "fn": 1,
+      "failed": 0,
+      "precision": {
+        "value": null,
+        "wilson_95": null,
+        "denominator": 0
+      },
+      "recall": {
+        "value": 0.0,
+        "wilson_95": [
+          0.0,
+          0.7934506856227626
+        ],
+        "denominator": 1
+      },
+      "complete_cases": 2,
+      "total_cases": 2
+    }
+  },
+  "per_engine": {
+    "graph": {
+      "tp": 0,
+      "fp": 0,
+      "tn": 2,
+      "fn": 2,
+      "failed": 0,
+      "precision": {
+        "value": null,
+        "wilson_95": null,
+        "denominator": 0
+      },
+      "recall": {
+        "value": 0.0,
+        "wilson_95": [
+          0.0,
+          0.6576197724933469
+        ],
+        "denominator": 2
+      },
+      "complete_cases": 4,
+      "total_cases": 4
+    }
+  },
+  "cases": [
+    {
+      "id": "fastify-request-body-positive",
+      "family": "fastify-request-body",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "c4a5a906bc9bc4b1037c379b6a2f1ca74630e7ee467c75b38875e6fc4dcbd12e",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 82.11580000352114
+    },
+    {
+      "id": "fastify-request-body-safe",
+      "family": "fastify-request-body",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "57b7bdb8d28c489078093df0c25f45cc7202d8a7f4285b8020dd6316135659e2",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 56.11250000947621
+    },
+    {
+      "id": "fastapi-query-params-positive",
+      "family": "fastapi-query-params",
+      "class": "path-traversal",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "f863f91eaa8b6b2d1564b2e3917795058fda2eeaf20a2701d006aa6a87429b04",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 68.43119999393821
+    },
+    {
+      "id": "fastapi-query-params-safe",
+      "family": "fastapi-query-params",
+      "class": "path-traversal",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "1941945b05a763fdca6e489ff3c12f701b54473d789792e2a7407ed248d41017",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 66.58540001080837
+    }
+  ]
+}

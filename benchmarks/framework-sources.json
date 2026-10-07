@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled conventional request-shape examples, not full framework coverage",
+  "cases": [
+    {
+      "id": "fastify-request-body-positive",
+      "family": "fastify-request-body",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "function route(request, reply) { return db.query('SELECT ' + request.body.name); }\n"
+      },
+      "rationale": "Conventional request-object field reaches unsafe sink"
+    },
+    {
+      "id": "fastify-request-body-safe",
+      "family": "fastify-request-body",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "function route(request, reply) { return db.query('SELECT ?', [request.body.name]); }\n"
+      },
+      "rationale": "Parameterized operation or fixed input"
+    },
+    {
+      "id": "fastapi-query-params-positive",
+      "family": "fastapi-query-params",
+      "split": "development",
+      "class": "path-traversal",
+      "positive": true,
+      "rules": [
+        "interproc-path-traversal"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "def route(request):\n    return open(request.query_params['file'])\n"
+      },
+      "rationale": "Conventional request-object field reaches unsafe sink"
+    },
+    {
+      "id": "fastapi-query-params-safe",
+      "family": "fastapi-query-params",
+      "split": "development",
+      "class": "path-traversal",
+      "positive": false,
+      "rules": [
+        "interproc-path-traversal"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "def route(request):\n    return open('public.txt')\n"
+      },
+      "rationale": "Parameterized operation or fixed input"
+    }
+  ]
+}

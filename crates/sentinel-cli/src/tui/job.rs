@@ -16,6 +16,7 @@ pub enum Kind {
     Preview,
     Index,
     Verify,
+    AuditStatus,
 }
 pub struct Completed {
     pub kind: Kind,

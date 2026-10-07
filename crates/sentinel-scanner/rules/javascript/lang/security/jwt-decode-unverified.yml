@@ -1,0 +1,9 @@
+rules:
+  - id: javascript-jwt-decode-unverified
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: JWT decoded without signature verification at this call. Review whether these claims influence authentication or authorization; use jwt.verify with trusted keys and explicit algorithms before trusting claims.
+    pattern: jwt.decode(...)
+    metadata:
+      cwe: [CWE-347]
+      confidence: MEDIUM

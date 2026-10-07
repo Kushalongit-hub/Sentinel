@@ -1,0 +1,9 @@
+rules:
+  - id: python-debug-server
+    languages: [python]
+    severity: HIGH
+    message: Debug server explicitly enabled. Disable debug mode in deployed applications; interactive debuggers can expose internals or permit code execution.
+    pattern-regex: '\brun\s*\([^)]*\bdebug\s*=\s*True\b'
+    metadata:
+      cwe: [CWE-489]
+      confidence: HIGH

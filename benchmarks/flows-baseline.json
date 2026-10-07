@@ -1,0 +1,328 @@
+{
+  "schema_version": 1,
+  "corpus_sha256": "0a527e1f1cbfc2d55aa9b5dab3b33c6e0589a430499664262953574e3ab21731",
+  "binary_sha256": "19ff0af66a4e84236bf87da0cda912617157c451764b8b27caf6cec0f9ea878b",
+  "split": "development",
+  "scope": "case-level detection of mapped rules; additional findings are unscored",
+  "summary": {
+    "tp": 4,
+    "fp": 0,
+    "tn": 4,
+    "fn": 0,
+    "failed": 0,
+    "precision": {
+      "value": 1.0,
+      "wilson_95": [
+        0.5101091635454027,
+        1.0
+      ],
+      "denominator": 4
+    },
+    "recall": {
+      "value": 1.0,
+      "wilson_95": [
+        0.5101091635454027,
+        1.0
+      ],
+      "denominator": 4
+    },
+    "complete_cases": 8,
+    "total_cases": 8
+  },
+  "per_class": {
+    "command-injection": {
+      "tp": 1,
+      "fp": 0,
+      "tn": 1,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "complete_cases": 2,
+      "total_cases": 2
+    },
+    "path-traversal": {
+      "tp": 1,
+      "fp": 0,
+      "tn": 1,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "complete_cases": 2,
+      "total_cases": 2
+    },
+    "sql-injection": {
+      "tp": 1,
+      "fp": 0,
+      "tn": 1,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "complete_cases": 2,
+      "total_cases": 2
+    },
+    "xss": {
+      "tp": 1,
+      "fp": 0,
+      "tn": 1,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "complete_cases": 2,
+      "total_cases": 2
+    }
+  },
+  "per_engine": {
+    "graph": {
+      "tp": 4,
+      "fp": 0,
+      "tn": 4,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.5101091635454027,
+          1.0
+        ],
+        "denominator": 4
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.5101091635454027,
+          1.0
+        ],
+        "denominator": 4
+      },
+      "complete_cases": 8,
+      "total_cases": 8
+    }
+  },
+  "cases": [
+    {
+      "id": "python-layered-sql-positive",
+      "family": "python-layered-sql",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "157f5dcebc0bf37b4d4e7b080979a2835cec8dd1fc40e2ce8bdbbb0da0f1734d",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 2,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 4370.433799995226
+    },
+    {
+      "id": "python-layered-sql-safe",
+      "family": "python-layered-sql",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "400af824bbf401fcbda72cb3cf618a0abcfdacb9e625176acf08ca845702ddd6",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 66.5249000012409
+    },
+    {
+      "id": "typescript-layered-xss-positive",
+      "family": "typescript-layered-xss",
+      "class": "xss",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "de42d086a9ede07d2db74c02dbb20949c64af5339827bc7950a930c8795a5715",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-xss",
+          "line": 1,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 84.61070001067128
+    },
+    {
+      "id": "typescript-layered-xss-safe",
+      "family": "typescript-layered-xss",
+      "class": "xss",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "ef9db10a9a98fd549fcc109ac197c484e9b1488a57a88f891e5929be2c76bfe7",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 71.83950000035111
+    },
+    {
+      "id": "javascript-layered-path-positive",
+      "family": "javascript-layered-path",
+      "class": "path-traversal",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "453fe9fc61b75fc03971ea832723b6915a3eaca08a1a7c6af7fd803c8bac113e",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-path-traversal",
+          "line": 1,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 104.4767999992473
+    },
+    {
+      "id": "javascript-layered-path-safe",
+      "family": "javascript-layered-path",
+      "class": "path-traversal",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "6b9ed108ddfefff99cb1939c220443c61a50c561cb2869d5a2b2e042fa108a8a",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 67.54050000745337
+    },
+    {
+      "id": "python-layered-command-positive",
+      "family": "python-layered-command",
+      "class": "command-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "f9800785272d7aeb54098bd12d64f255ed929418c8dbce63aa674fe5843a1e58",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 3,
+          "severity": "High"
+        },
+        {
+          "title": "interproc-command-injection",
+          "line": 3,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 1,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 76.08630000322592
+    },
+    {
+      "id": "python-layered-command-safe",
+      "family": "python-layered-command",
+      "class": "command-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "2af234bb9876b952dcad902159747ac0bf3978f3c743a4e364990c1b211bfdc9",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 59.280300003592856
+    }
+  ]
+}

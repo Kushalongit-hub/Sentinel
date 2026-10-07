@@ -12,13 +12,13 @@ The workspace already has reusable parsing, rules, persistence, and reporting:
 | sentinel-ast | Tree-sitter Rust/Python/JS/TS/TSX parsing, validation, file walking, symbols | AST-derived definitions, imports, calls, and compact flow IR |
 | sentinel-taint | JS/TS lexical data flow, branches, loop joins, sanitizers | Retain existing rules; add bounded cross-function interpretation of AST flow IR |
 | sentinel-scanner | Embedded validated rules, offline pipeline, optional bounded external adapters | Rule evaluation and shared Git selection |
-| sentinel-db | SQLite schema v4, transactional scan snapshots and finding lifecycle | Add versioned graph and baseline tables to the same project database |
+| sentinel-db | SQLite schema v6, transactional scan snapshots, graph, baseline and audit revisions | Preserve history while extending evidence storage |
 | sentinel-llm | Optional Ollama/NIM explanations on shared lexical context | Keep optional; no LLM is needed for any MCP security conclusion |
 | sentinel-report | Terminal, JSON, SARIF | Existing scan outputs remain compatible |
 | sentinel-cli | audit, diff, rules, explain, explain-codebase, Ratatui TUI | Add index, index-status, verify, baseline, and stdio MCP |
 
 The MVP now implements a persistent symbol/call graph, bounded repository taint,
-ranked security context, baseline lifecycle, patch verification, and ten stdio MCP
+ranked security context, baseline lifecycle, patch verification, and thirteen stdio MCP
 tools. Existing audits and provider-independent AI explanations remain available.
 The TUI exposes audit, diff, index, verify, rule inspection and AI explanations.
 
@@ -57,6 +57,15 @@ Schema v4 also adds `security_baselines` and `baseline_findings`. Entries retain
 logical fingerprints, rule names, locations, statuses, and first/last seen
 timestamps. Versioned migrations preserve existing scans, finding lifecycle and
 graph data. Future schema versions are rejected.
+
+Schema v5 adds normalized audit revisions, latest pointers, coverage, attempts,
+candidates and reviews. See [audit storage](audit-workflow.md) for import and legacy
+compatibility. Patch assessments include source-manifest identities, detector/rule
+provenance and typed candidate evidence. Candidate assessment is independent of
+occurrence lists (new, unchanged, resolved, regressed); static matches remain
+`needs_validation`. Legacy baselines deserialize without fabricated manifests and
+cannot produce a provenance-backed PASS. Source disagreements between indexed
+graph and assessed rule text make comparison incomplete.
 
 ## Analysis boundaries
 

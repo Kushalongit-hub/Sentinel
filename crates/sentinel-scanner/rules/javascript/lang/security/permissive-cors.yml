@@ -1,0 +1,9 @@
+rules:
+  - id: javascript-permissive-cors
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: CORS reflects arbitrary request origins. Restrict origins to an explicit allowlist, especially when credentials or sensitive responses are involved.
+    pattern-regex: '\bcors\s*\(\s*\{[^}]*\borigin\s*:\s*true\b'
+    metadata:
+      cwe: [CWE-942]
+      confidence: MEDIUM

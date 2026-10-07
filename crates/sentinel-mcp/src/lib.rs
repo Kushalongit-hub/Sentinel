@@ -68,6 +68,15 @@ pub struct FindingInput {
 fn default_items() -> usize {
     40
 }
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HistoryInput {
+    #[serde(default = "default_history_limit")]
+    pub limit: usize,
+}
+fn default_history_limit() -> usize {
+    20
+}
 fn default_depth() -> usize {
     8
 }
@@ -148,6 +157,28 @@ impl SecurityServer {
 }
 #[tool_router]
 impl SecurityServer {
+    #[tool(
+        description = "Return the pinned Cloudflare/Sentinel audit adapter and validation contract. This is guidance, not permission to execute target code or contact cloud models."
+    )]
+    async fn sentinel_get_audit_workflow(&self) -> CallToolResult {
+        CallToolResult::structured(sentinel_graph::audit_workflow::workflow())
+    }
+    #[tool(
+        description = "Read the latest validated imported audit, coverage gaps, recorded review verdicts, and source freshness. Imported AI audit claims never change deterministic patch gates."
+    )]
+    async fn sentinel_get_audit_status(&self) -> CallToolResult {
+        self.execute(None, |engine| engine.audit_status()).await
+    }
+    #[tool(
+        description = "List up to 100 retained audit revision metadata records. Does not revalidate historical source freshness or expose SQL."
+    )]
+    async fn sentinel_get_audit_history(
+        &self,
+        Parameters(input): Parameters<HistoryInput>,
+    ) -> CallToolResult {
+        self.execute(None, move |engine| engine.audit_history(input.limit))
+            .await
+    }
     #[tool(
         description = "Incrementally index the configured repository into a local security graph. Does not execute repository code."
     )]

@@ -205,16 +205,30 @@ impl Engine {
                     .iter()
                     .any(|p| p.confidence != "low"));
         let mut reasons = vec![];
+        let detector_changed = comparison
+            .before_detector
+            .as_ref()
+            .zip(comparison.after_detector.as_ref())
+            .is_none_or(|(before, after)| before != after);
         let verdict = if fail {
             reasons.push("New or regressed high/critical findings or dangerous taint paths require remediation.".into());
             Verdict::Fail
         } else if !comparison.complete
+            || detector_changed
+            || comparison.before_snapshot.is_none()
+            || comparison.after_snapshot.is_none()
             || !added.is_empty()
             || !comparison.unclassified_findings.is_empty()
         {
             reasons.push(
                 "Lower severity, low-confidence, or incomplete evidence requires review.".into(),
             );
+            if comparison.before_snapshot.is_none() || comparison.after_snapshot.is_none() {
+                reasons.push("A legacy assessment lacks source provenance; create a fresh baseline after reviewing current debt.".into());
+            }
+            if detector_changed {
+                reasons.push("Detector provenance is missing or changed; review a fresh baseline before treating this comparison as PASS.".into());
+            }
             Verdict::Warn
         } else {
             reasons.push(

@@ -389,7 +389,7 @@ fn mcp_stdio_indexes_traces_retrieves_and_rejects_scope_escape() {
     request("notifications/initialized", serde_json::json!({}));
     let tools = request("tools/list", serde_json::json!({}));
     assert!(
-        tools["result"]["tools"].as_array().unwrap().len() == 10,
+        tools["result"]["tools"].as_array().unwrap().len() == 13,
         "{tools}"
     );
     assert!(tools["result"]["tools"]
@@ -397,10 +397,47 @@ fn mcp_stdio_indexes_traces_retrieves_and_rejects_scope_escape() {
         .unwrap()
         .iter()
         .all(|tool| tool["inputSchema"]["type"] == "object"));
+    let workflow = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_get_audit_workflow","arguments":{}}),
+    );
+    assert_eq!(
+        workflow["result"]["structuredContent"]["target_execution"],
+        false
+    );
+    assert!(workflow["result"]["structuredContent"]["skill"]
+        .as_str()
+        .unwrap()
+        .contains("sentinel_trace_taint"));
+    let audit_status = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_get_audit_status","arguments":{}}),
+    );
+    assert_eq!(
+        audit_status["result"]["structuredContent"]["available"],
+        false
+    );
+    assert_eq!(
+        audit_status["result"]["structuredContent"]["partial_coverage"],
+        true
+    );
     let indexed = request(
         "tools/call",
         serde_json::json!({"name":"sentinel_index_project","arguments":{"path":"."}}),
     );
+    let history = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_get_audit_history","arguments":{"limit":1}}),
+    );
+    assert_eq!(
+        history["result"]["structuredContent"]["revisions"],
+        serde_json::json!([])
+    );
+    let invalid_history = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_get_audit_history","arguments":{"limit":101}}),
+    );
+    assert_eq!(invalid_history["result"]["isError"], true);
     assert_eq!(
         indexed["result"]["structuredContent"]["files_indexed"], 3,
         "{indexed}"
@@ -541,7 +578,7 @@ fn rules_list_actual_catalog_without_creating_database() {
     let f = Fixture::new();
     let out = f.run(&["rules"]);
     assert!(out.status.success());
-    assert_eq!(String::from_utf8_lossy(&out.stdout).lines().count(), 19);
+    assert_eq!(String::from_utf8_lossy(&out.stdout).lines().count(), 22);
     assert!(!f.0.join(".sentinel.db").exists());
 }
 #[test]

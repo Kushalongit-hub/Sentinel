@@ -75,7 +75,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         View::Intelligence => paragraph(
             frame,
             columns[1],
-            "Security graph / patch verification",
+            "Security graph / verification / audit coverage",
             app.intelligence_text.clone(),
             app.scroll,
         ),
@@ -100,7 +100,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
             if app.job.is_some() {
                 " Esc cancel | Tab views | ? help | q quit"
             } else {
-                " Tab views | a audit d diff | g index w verify | ? help | q quit"
+                " Tab views | a audit d diff | g index w verify u audit | ? help | q quit"
             },
             Style::new().fg(MUTED),
         ),
@@ -109,7 +109,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     if app.help {
         let modal = centered(area, 82, 25);
         frame.render_widget(Clear, modal);
-        paragraph(frame,modal,"Keyboard guide","NAVIGATE\n  Tab / Shift+Tab or 1-5     Change workspace\n  j / k or arrows            Select finding / rule; scroll evidence\n  PgUp / PgDn / Home         Scroll detail / reset\n\nSECURITY\n  a Audit   d Git diff   g Index graph   w Verify patch\n  / Filter findings   p Project path   t Severity threshold\n  x External scanners   v Semgrep config   s JSON export   S SARIF export\n\nAI EXPLANATIONS\n  e Explain selected finding   c Explain codebase\n  m Local / NVIDIA NIM / both   i Question   l Local model   n NIM model\n  b Preview identical shared context   Enter Submit explanation\n\n  Esc Close / cancel operation    Ctrl+C / q Quit\n  Exports create new files. Cloud submission sends the previewed context.\n  ? or Esc closes. Arrows / PgUp / PgDn scroll.",app.help_scroll);
+        paragraph(frame,modal,"Keyboard guide","NAVIGATE\n  Tab / Shift+Tab or 1-5     Change workspace\n  j / k or arrows            Select finding / rule; scroll evidence\n  PgUp / PgDn / Home         Scroll detail / reset\n\nSECURITY\n  a Audit   d Git diff   g Index graph   w Verify patch   u Audit coverage\n  / Filter findings   p Project path   t Severity threshold\n  x External scanners   v Semgrep config   s JSON export   S SARIF export\n\nAI EXPLANATIONS\n  e Explain selected finding   c Explain codebase\n  m Local / NVIDIA NIM / both   i Question   l Local model   n NIM model\n  b Preview identical shared context   Enter Submit explanation\n\n  Esc Close / cancel operation    Ctrl+C / q Quit\n  Exports create new files. Cloud submission sends the previewed context.\n  ? or Esc closes. Arrows / PgUp / PgDn scroll.",app.help_scroll);
     }
     if let Some(editor) = &app.editor {
         let modal = centered(area, 76, 7);

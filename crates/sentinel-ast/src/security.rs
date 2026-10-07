@@ -31,6 +31,8 @@ fn source_name(value: &str) -> bool {
         "request.GET",
         "request.POST",
         "request.query",
+        "request.body",
+        "request.query_params",
         "location.hash",
         "location.search",
         "window.location.hash",
@@ -662,6 +664,7 @@ pub fn extract_security_file(
         pending.extend(named(node).into_iter().map(|n| (n, depth + 1)));
     }
     let mut out = IndexedFile {
+        semantics_revision: ANALYSIS_SEMANTICS_REVISION,
         path: path.into(),
         language,
         content_hash: identity(source),

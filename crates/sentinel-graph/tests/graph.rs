@@ -91,6 +91,197 @@ fn incremental_index_and_cross_file_parameter_and_return_flow() {
         .all(|edge| !edge.resolved));
 }
 #[test]
+fn baseline_evidence_tracks_source_identity_without_confirming_candidates() {
+    use sentinel_core::evidence::CandidateAssessment;
+    let fixture = Fixture::new();
+    fixture.write("hash.py", "import hashlib\nvalue = hashlib.md5(password)\n");
+    let engine = Engine::open(&fixture.0).unwrap();
+    engine.create_baseline().unwrap();
+    let first = engine.verify_patch(None).unwrap();
+    let snapshot = first.comparison.after_snapshot.as_ref().unwrap();
+    assert_eq!(
+        first.comparison.before_snapshot.as_ref().unwrap().id,
+        snapshot.id
+    );
+    assert!(!first.comparison.after_evidence.is_empty());
+    for evidence in &first.comparison.after_evidence {
+        assert_eq!(evidence.snapshot_id, snapshot.id);
+        assert_eq!(evidence.assessment, CandidateAssessment::NeedsValidation);
+        assert_eq!(evidence.detector.rule_set_id.len(), 64);
+        assert_eq!(evidence.location.file, "hash.py");
+    }
+    fixture.write(
+        "hash.py",
+        "import hashlib\nvalue = hashlib.sha256(password)\n",
+    );
+    let fixed = engine.verify_patch(None).unwrap();
+    assert_ne!(
+        fixed.comparison.after_snapshot.as_ref().unwrap().id,
+        snapshot.id
+    );
+    assert!(fixed.comparison.after_evidence.is_empty());
+    assert!(!fixed.comparison.before_evidence.is_empty());
+}
+#[test]
+fn legacy_baseline_is_readable_but_cannot_produce_a_provenance_backed_pass() {
+    let fixture = Fixture::new();
+    fixture.write("main.py", "value = 1\n");
+    let engine = Engine::open(&fixture.0).unwrap();
+    engine.create_baseline().unwrap();
+    let raw: String = engine
+        .db
+        .connection()
+        .query_row(
+            "SELECT payload FROM security_baselines WHERE project_id=?1",
+            [&engine.project_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let mut old: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    old.as_object_mut().unwrap().remove("snapshot");
+    old.as_object_mut().unwrap().remove("evidence");
+    engine
+        .db
+        .connection()
+        .execute(
+            "UPDATE security_baselines SET payload=?1 WHERE project_id=?2",
+            rusqlite::params![serde_json::to_string(&old).unwrap(), engine.project_id],
+        )
+        .unwrap();
+    let result = engine.verify_patch(None).unwrap();
+    assert_eq!(result.verdict, sentinel_graph::verification::Verdict::Warn);
+    assert!(result.comparison.before_snapshot.is_none());
+    assert!(result
+        .reasons
+        .iter()
+        .any(|reason| reason.contains("legacy")));
+}
+#[test]
+fn static_jobs_resume_across_restarts_and_enforce_budgets_and_cancellation() {
+    use sentinel_graph::jobs::JobState;
+    let fixture = Fixture::new();
+    fixture.write("a.py", "value = 1\n");
+    fixture.write("b.py", "value = 2\n");
+    let engine = Engine::open(&fixture.0).unwrap();
+    assert!(engine.create_scan_job(0, 60).is_err());
+    let job = engine.create_scan_job(2, 60).unwrap();
+    let first = engine.resume_scan_job(&job.id, 1, false).unwrap();
+    assert_eq!(first.state, JobState::Pending);
+    assert_eq!(first.results.len(), 1);
+    drop(engine);
+    let engine = Engine::open(&fixture.0).unwrap();
+    let completed = engine.resume_scan_job(&job.id, 1, false).unwrap();
+    assert_eq!(completed.state, JobState::Completed);
+    assert_eq!(completed.attempts_reserved, 2);
+    assert_eq!(
+        engine
+            .resume_scan_job(&job.id, 1, false)
+            .unwrap()
+            .attempts_reserved,
+        2
+    );
+    let limited = engine.create_scan_job(1, 60).unwrap();
+    let exhausted = engine.resume_scan_job(&limited.id, 100, false).unwrap();
+    assert_eq!(exhausted.state, JobState::BudgetExhausted);
+    assert_eq!(exhausted.results.len(), 1);
+    let cancelled = engine.create_scan_job(2, 60).unwrap();
+    engine.cancel_scan_job(&cancelled.id).unwrap();
+    let cancelled = engine.resume_scan_job(&cancelled.id, 1, false).unwrap();
+    assert_eq!(cancelled.state, JobState::Cancelled);
+    assert_eq!(cancelled.attempts_reserved, 0);
+    assert!(engine.resume_scan_job(&job.id, 0, false).is_err());
+}
+
+#[test]
+fn static_jobs_reject_changed_sources_and_account_for_interrupted_attempts() {
+    use sentinel_graph::jobs::JobState;
+    let fixture = Fixture::new();
+    fixture.write("a.py", "value = 1\n");
+    let engine = Engine::open(&fixture.0).unwrap();
+    let stale = engine.create_scan_job(2, 60).unwrap();
+    fixture.write("a.py", "value = 2\n");
+    assert_eq!(
+        engine.resume_scan_job(&stale.id, 1, false).unwrap().state,
+        JobState::Stale
+    );
+    let mut interrupted = engine.create_scan_job(2, 60).unwrap();
+    interrupted.state = JobState::Running;
+    interrupted.attempts_reserved = 1;
+    interrupted.active_file = Some("a.py".into());
+    engine
+        .db
+        .connection()
+        .execute(
+            "UPDATE security_jobs SET payload=?1 WHERE job_id=?2",
+            rusqlite::params![serde_json::to_string(&interrupted).unwrap(), interrupted.id],
+        )
+        .unwrap();
+    assert!(engine.resume_scan_job(&interrupted.id, 1, false).is_err());
+    let recovered = engine.resume_scan_job(&interrupted.id, 1, true).unwrap();
+    assert_eq!(recovered.state, JobState::BudgetExhausted);
+    assert_eq!(recovered.attempts_reserved, 1);
+    assert_eq!(recovered.elapsed_ms, recovered.max_elapsed_ms);
+    assert!(recovered.results.is_empty());
+}
+#[test]
+fn analysis_upgrades_reparse_unchanged_files_and_invalidate_old_detector_passes() {
+    let fixture = Fixture::new();
+    fixture.write("main.py", "value = 1\n");
+    let engine = Engine::open(&fixture.0).unwrap();
+    engine.index().unwrap();
+    let raw: String = engine
+        .db
+        .connection()
+        .query_row(
+            "SELECT payload FROM files WHERE project_id=?1 AND path='main.py'",
+            [&engine.project_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let mut legacy: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    legacy.as_object_mut().unwrap().remove("semantics_revision");
+    engine
+        .db
+        .connection()
+        .execute(
+            "UPDATE files SET payload=?1 WHERE project_id=?2 AND path='main.py'",
+            rusqlite::params![serde_json::to_string(&legacy).unwrap(), engine.project_id],
+        )
+        .unwrap();
+    assert_eq!(engine.index().unwrap().changed_files, 1);
+    assert_eq!(
+        engine.snapshot().unwrap().files[0].semantics_revision,
+        sentinel_core::security::ANALYSIS_SEMANTICS_REVISION
+    );
+    assert_eq!(engine.index().unwrap().unchanged_files, 1);
+    engine.create_baseline().unwrap();
+    let raw: String = engine
+        .db
+        .connection()
+        .query_row(
+            "SELECT payload FROM security_baselines WHERE project_id=?1",
+            [&engine.project_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let mut old: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    old["detector"]["semantics_revision"] = serde_json::json!(0);
+    engine
+        .db
+        .connection()
+        .execute(
+            "UPDATE security_baselines SET payload=?1 WHERE project_id=?2",
+            rusqlite::params![serde_json::to_string(&old).unwrap(), engine.project_id],
+        )
+        .unwrap();
+    let result = engine.verify_patch(None).unwrap();
+    assert_eq!(result.verdict, sentinel_graph::verification::Verdict::Warn);
+    assert!(result
+        .reasons
+        .iter()
+        .any(|reason| reason.contains("Detector provenance")));
+}
+#[test]
 fn category_specific_sanitizer_prevents_xss_without_hiding_raw_flow() {
     let f = Fixture::new();
     f.write("routes.ts","import { render } from './renderer';\nfunction handle(req) { return render(escapeHtml(req.query.name)); }\n");

@@ -2,7 +2,7 @@
 
 Sentinel provides deterministic security evidence to coding agents over local
 stdio MCP. No model, API key, external scanner, or network connection is needed
-for its ten security tools. The agent remains responsible for editing code.
+for its thirteen security tools. The agent remains responsible for editing code.
 
 ## Build and bind a repository
 
@@ -168,6 +168,9 @@ to be the Git repository root. Saved-baseline verification can work without Git.
 | sentinel_find_symbol | Search names, IDs, files and locations |
 | sentinel_get_callers | Incoming calls and caller symbols |
 | sentinel_get_callees | Outgoing calls; unresolved dynamic names remain explicit |
+| sentinel_get_audit_workflow | Bundled audit adapter, upstream revision and validation contract |
+| sentinel_get_audit_status | Retained audit records, coverage gaps and source freshness |
+| sentinel_get_audit_history | Bounded retained revision metadata; historical source freshness is not inferred |
 
 Context includes freshly derived graph-flow findings alongside existing stored
 occurrences. For explain_finding, first persist the occurrence through scan_file

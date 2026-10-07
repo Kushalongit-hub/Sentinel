@@ -99,6 +99,17 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Commands {
+    /// Persist, resume and cancel native static scan jobs without executing project code.
+    Job {
+        #[command(subcommand)]
+        command: JobCommand,
+    },
+    /// Scan one repository file with rules and cross-function graph evidence.
+    ScanFile {
+        path: String,
+        #[arg(long, default_value = ".")]
+        project: PathBuf,
+    },
     Audit {
         path: String,
         #[command(flatten)]
@@ -133,6 +144,11 @@ enum Commands {
         ai: AiArgs,
     },
     Rules,
+    /// Plan, validate, retain and export independently reviewed security audits.
+    AuditWorkflow {
+        #[command(subcommand)]
+        command: AuditWorkflowCommand,
+    },
     /// Incrementally build the persistent repository security graph.
     Index {
         #[arg(default_value = ".")]
@@ -171,6 +187,81 @@ enum BaselineCommand {
         path: PathBuf,
     },
 }
+#[derive(Subcommand)]
+enum JobCommand {
+    Create {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long, default_value_t = 100, value_parser = clap::value_parser!(u32).range(1..=100))]
+        max_attempts: u32,
+        #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u64).range(1..=3600))]
+        max_seconds: u64,
+    },
+    Resume {
+        id: String,
+        #[arg(long, default_value = ".")]
+        project: PathBuf,
+        #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=100))]
+        max_units: u32,
+        #[arg(long)]
+        recover_interrupted: bool,
+    },
+    Status {
+        id: String,
+        #[arg(long, default_value = ".")]
+        project: PathBuf,
+    },
+    Cancel {
+        id: String,
+        #[arg(long, default_value = ".")]
+        project: PathBuf,
+    },
+}
+#[derive(Subcommand)]
+enum AuditWorkflowCommand {
+    /// List retained revision metadata without asserting historical source freshness.
+    History {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=100))]
+        limit: u32,
+    },
+    Init {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+        /// Add a normally excluded file to the source snapshot (repeatable).
+        #[arg(long)]
+        include: Vec<String>,
+    },
+    Validate {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        run: PathBuf,
+    },
+    Import {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        run: PathBuf,
+    },
+    Status {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    Report {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    Skill {
+        #[arg(long)]
+        output: PathBuf,
+    },
+}
 fn main() {
     let cli = Cli::parse();
     let result = match cli.command.unwrap_or_else(|| Commands::Tui {
@@ -191,6 +282,89 @@ fn main() {
         } => explain::explain_with_ai(finding_id, project, db, ai),
         Commands::ExplainCodebase { path, db, ai } => explain::explain_codebase(path, db, ai),
         Commands::Rules => rules::rules(),
+        Commands::Job { command } => (|| -> anyhow::Result<i32> {
+            use sentinel_graph::{jobs::JobState, Engine};
+            let (job, executing) = match command {
+                JobCommand::Create {
+                    path,
+                    max_attempts,
+                    max_seconds,
+                } => (
+                    Engine::open(path)?.create_scan_job(max_attempts as usize, max_seconds)?,
+                    false,
+                ),
+                JobCommand::Resume {
+                    id,
+                    project,
+                    max_units,
+                    recover_interrupted,
+                } => (
+                    Engine::open(project)?.resume_scan_job(
+                        &id,
+                        max_units as usize,
+                        recover_interrupted,
+                    )?,
+                    true,
+                ),
+                JobCommand::Status { id, project } => {
+                    (Engine::open(project)?.scan_job_status(&id)?, false)
+                }
+                JobCommand::Cancel { id, project } => {
+                    (Engine::open(project)?.cancel_scan_job(&id)?, false)
+                }
+            };
+            let code = if executing && job.state != JobState::Completed {
+                2
+            } else {
+                0
+            };
+            println!("{}", serde_json::to_string_pretty(&job)?);
+            Ok(code)
+        })(),
+        Commands::ScanFile { path, project } => (|| -> anyhow::Result<i32> {
+            let scan = sentinel_graph::Engine::open(project)?.scan_file(&path)?;
+            let code = if scan.report.outcome != sentinel_core::ScanOutcome::Complete {
+                2
+            } else if scan.report.findings.is_empty() {
+                0
+            } else {
+                1
+            };
+            println!("{}", serde_json::to_string_pretty(&scan)?);
+            Ok(code)
+        })(),
+        Commands::AuditWorkflow { command } => (|| -> anyhow::Result<i32> {
+            use sentinel_graph::{audit_workflow, Engine};
+            let value = match command {
+                AuditWorkflowCommand::History { path, limit } => {
+                    serde_json::to_value(Engine::open(path)?.audit_history(limit as usize)?)?
+                }
+                AuditWorkflowCommand::Init {
+                    path,
+                    output,
+                    include,
+                } => serde_json::to_value(Engine::open(path)?.init_audit_run(&output, include)?)?,
+                AuditWorkflowCommand::Validate { path, run } => {
+                    let run = Engine::open(path)?.validate_audit_run(&run)?;
+                    serde_json::json!({"valid":true,"run_id":run.metadata.run_id,"run_status":run.metadata.run_status,"schema_validation_is_exploit_proof":false})
+                }
+                AuditWorkflowCommand::Import { path, run } => {
+                    serde_json::to_value(Engine::open(path)?.import_audit_run(&run)?)?
+                }
+                AuditWorkflowCommand::Status { path } => {
+                    serde_json::to_value(Engine::open(path)?.audit_status()?)?
+                }
+                AuditWorkflowCommand::Report { path, output } => {
+                    audit_workflow::export_report(&Engine::open(path)?.audit_status()?, &output)?;
+                    serde_json::json!({"report":output})
+                }
+                AuditWorkflowCommand::Skill { output } => {
+                    serde_json::json!({"skill":audit_workflow::export_skill(&output)?})
+                }
+            };
+            println!("{}", serde_json::to_string_pretty(&value)?);
+            Ok(0)
+        })(),
         Commands::Index { path } => (|| -> anyhow::Result<i32> {
             let stats = sentinel_graph::Engine::open(path)?.index()?;
             println!("{}", serde_json::to_string_pretty(&stats)?);

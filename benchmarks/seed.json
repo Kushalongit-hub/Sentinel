@@ -1,0 +1,202 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled seed; independent adjudication pending",
+  "cases": [
+    {
+      "id": "python-md5-positive",
+      "family": "python-md5",
+      "split": "development",
+      "class": "weak-hash",
+      "positive": true,
+      "rules": [
+        "python-insecure-hash-function"
+      ],
+      "files": {
+        "main.py": "import hashlib\npassword_digest = hashlib.md5(password).hexdigest()\n"
+      },
+      "rationale": "Unsafe security usage"
+    },
+    {
+      "id": "python-md5-safe",
+      "family": "python-md5",
+      "split": "development",
+      "class": "weak-hash",
+      "positive": false,
+      "rules": [
+        "python-insecure-hash-function"
+      ],
+      "files": {
+        "main.py": "import hashlib\nchecksum = hashlib.md5(data, usedforsecurity=False).hexdigest()\n"
+      },
+      "rationale": "Secure alternative or explicitly non-security use"
+    },
+    {
+      "id": "python-tls-positive",
+      "family": "python-tls",
+      "split": "development",
+      "class": "tls-verification",
+      "positive": true,
+      "rules": [
+        "python-unverified-ssl-context"
+      ],
+      "files": {
+        "main.py": "import ssl\ncontext = ssl._create_unverified_context()\n"
+      },
+      "rationale": "Unsafe security usage"
+    },
+    {
+      "id": "python-tls-safe",
+      "family": "python-tls",
+      "split": "development",
+      "class": "tls-verification",
+      "positive": false,
+      "rules": [
+        "python-unverified-ssl-context"
+      ],
+      "files": {
+        "main.py": "import ssl\ncontext = ssl.create_default_context()\n"
+      },
+      "rationale": "Secure alternative or explicitly non-security use"
+    },
+    {
+      "id": "python-debug-positive",
+      "family": "python-debug",
+      "split": "development",
+      "class": "debug-server",
+      "positive": true,
+      "rules": [
+        "python-debug-server"
+      ],
+      "files": {
+        "main.py": "from flask import Flask\napp = Flask(__name__)\napp.run(debug=True)\n"
+      },
+      "rationale": "Unsafe security usage"
+    },
+    {
+      "id": "python-debug-safe",
+      "family": "python-debug",
+      "split": "development",
+      "class": "debug-server",
+      "positive": false,
+      "rules": [
+        "python-debug-server"
+      ],
+      "files": {
+        "main.py": "from flask import Flask\napp = Flask(__name__)\napp.run(debug=False)\n"
+      },
+      "rationale": "Secure alternative or explicitly non-security use"
+    },
+    {
+      "id": "javascript-eval-positive",
+      "family": "javascript-eval",
+      "split": "development",
+      "class": "dynamic-execution",
+      "positive": true,
+      "rules": [
+        "javascript-detect-eval-with-expression"
+      ],
+      "files": {
+        "main.js": "const input = location.hash;\neval(input);\n"
+      },
+      "rationale": "Unsafe security usage"
+    },
+    {
+      "id": "javascript-eval-safe",
+      "family": "javascript-eval",
+      "split": "development",
+      "class": "dynamic-execution",
+      "positive": false,
+      "rules": [
+        "javascript-detect-eval-with-expression"
+      ],
+      "files": {
+        "main.js": "const input = location.hash;\nconsole.log(input);\n"
+      },
+      "rationale": "Secure alternative or explicitly non-security use"
+    },
+    {
+      "id": "typescript-eval-positive",
+      "family": "typescript-eval",
+      "split": "development",
+      "class": "dynamic-execution",
+      "positive": true,
+      "rules": [
+        "javascript-detect-eval-with-expression"
+      ],
+      "files": {
+        "main.ts": "const input: string = location.search;\neval(input);\n"
+      },
+      "rationale": "Unsafe security usage"
+    },
+    {
+      "id": "typescript-eval-safe",
+      "family": "typescript-eval",
+      "split": "development",
+      "class": "dynamic-execution",
+      "positive": false,
+      "rules": [
+        "javascript-detect-eval-with-expression"
+      ],
+      "files": {
+        "main.ts": "const input: string = location.search;\nconsole.log(input);\n"
+      },
+      "rationale": "Secure alternative or explicitly non-security use"
+    },
+    {
+      "id": "rust-tls-positive",
+      "family": "rust-tls",
+      "split": "development",
+      "class": "tls-verification",
+      "positive": true,
+      "rules": [
+        "rust-reqwest-accept-invalid"
+      ],
+      "files": {
+        "main.rs": "fn client() { let client = reqwest::Client::builder().danger_accept_invalid_certs(true).build(); }\n"
+      },
+      "rationale": "Unsafe security usage"
+    },
+    {
+      "id": "rust-tls-safe",
+      "family": "rust-tls",
+      "split": "development",
+      "class": "tls-verification",
+      "positive": false,
+      "rules": [
+        "rust-reqwest-accept-invalid"
+      ],
+      "files": {
+        "main.rs": "fn client() { let client = reqwest::Client::builder().build(); }\n"
+      },
+      "rationale": "Secure alternative or explicitly non-security use"
+    },
+    {
+      "id": "rust-hash-positive",
+      "family": "rust-hash",
+      "split": "development",
+      "class": "weak-hash",
+      "positive": true,
+      "rules": [
+        "rust-insecure-hashes"
+      ],
+      "files": {
+        "main.rs": "fn hash() { let digest = md5::Md5::new(); }\n"
+      },
+      "rationale": "Unsafe security usage"
+    },
+    {
+      "id": "rust-hash-safe",
+      "family": "rust-hash",
+      "split": "development",
+      "class": "weak-hash",
+      "positive": false,
+      "rules": [
+        "rust-insecure-hashes"
+      ],
+      "files": {
+        "main.rs": "fn hash() { let digest = sha2::Sha256::new(); }\n"
+      },
+      "rationale": "Secure alternative or explicitly non-security use"
+    }
+  ]
+}

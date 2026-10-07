@@ -66,13 +66,19 @@ impl SentinelDb {
         let version: i64 = self
             .conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version > 4 {
+        if version > 6 {
             return Err(DbError::Migration(format!(
-                "database version {version} is newer than supported version 4"
+                "database version {version} is newer than supported version 6"
             )));
         }
-        if version == 4 {
+        if version == 6 {
             return Ok(());
+        }
+        if version == 5 {
+            return self.migrate_jobs();
+        }
+        if version == 4 {
+            return self.migrate_audit();
         }
         if version == 3 {
             return self.migrate_baseline();
@@ -174,6 +180,37 @@ PRAGMA user_version=3;")?;
 CREATE TABLE IF NOT EXISTS security_baselines(project_id TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS baseline_findings(project_id TEXT NOT NULL,fingerprint TEXT NOT NULL,rule TEXT NOT NULL,location TEXT NOT NULL,status TEXT NOT NULL,first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(project_id,fingerprint));
 PRAGMA user_version=4; COMMIT;")?;
+        self.migrate_audit()
+    }
+    fn migrate_audit(&self) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS audit_revisions (
+ project_id TEXT NOT NULL, revision_id TEXT NOT NULL, run_id TEXT NOT NULL,
+ source_snapshot TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL,
+ imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(project_id,revision_id));
+CREATE INDEX IF NOT EXISTS idx_audit_runs ON audit_revisions(project_id,run_id);
+CREATE TABLE IF NOT EXISTS audit_latest (
+ project_id TEXT PRIMARY KEY, revision_id TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS audit_coverage (
+ project_id TEXT NOT NULL, revision_id TEXT NOT NULL, coverage_id TEXT NOT NULL,
+ status TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(project_id,revision_id,coverage_id));
+CREATE TABLE IF NOT EXISTS audit_attempts (
+ project_id TEXT NOT NULL, revision_id TEXT NOT NULL, coverage_id TEXT NOT NULL,
+ ordinal INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(project_id,revision_id,coverage_id,ordinal));
+CREATE TABLE IF NOT EXISTS audit_candidates (
+ project_id TEXT NOT NULL, revision_id TEXT NOT NULL, fingerprint TEXT NOT NULL,
+ assessment TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(project_id,revision_id,fingerprint));
+CREATE TABLE IF NOT EXISTS audit_reviews (
+ project_id TEXT NOT NULL, revision_id TEXT NOT NULL, fingerprint TEXT NOT NULL,
+ payload TEXT NOT NULL, PRIMARY KEY(project_id,revision_id,fingerprint));
+PRAGMA user_version=5;")?;
+        tx.commit()?;
+        self.migrate_jobs()
+    }
+    fn migrate_jobs(&self) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS security_jobs(project_id TEXT NOT NULL,job_id TEXT NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(project_id,job_id)); PRAGMA user_version=6;")?;
+        tx.commit()?;
         Ok(())
     }
     /// Access the shared SQLite store for composable transactional repository services.
@@ -426,8 +463,8 @@ mod tests {
             .conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 4);
-        db.conn.execute_batch("PRAGMA user_version=5;").unwrap();
+        assert_eq!(version, 6);
+        db.conn.execute_batch("PRAGMA user_version=7;").unwrap();
         assert!(db.migrate().is_err());
     }
 }

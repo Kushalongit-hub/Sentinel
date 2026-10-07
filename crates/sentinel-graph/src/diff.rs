@@ -4,6 +4,9 @@ use crate::{
     resolve_edges, Engine, IndexStats, Snapshot,
 };
 use anyhow::Result;
+use sentinel_core::evidence::{
+    CandidateAssessment, DetectorProvenance, EvidenceRecord, EvidenceSnapshot,
+};
 use sentinel_core::{security::*, Finding};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -27,6 +30,18 @@ pub struct DiffScan {
     pub coverage_notes: Vec<String>,
     pub omitted_count: usize,
     pub duration_ms: u128,
+    #[serde(default)]
+    pub before_snapshot: Option<EvidenceSnapshot>,
+    #[serde(default)]
+    pub after_snapshot: Option<EvidenceSnapshot>,
+    #[serde(default)]
+    pub before_evidence: Vec<EvidenceRecord>,
+    #[serde(default)]
+    pub after_evidence: Vec<EvidenceRecord>,
+    #[serde(default)]
+    pub before_detector: Option<DetectorProvenance>,
+    #[serde(default)]
+    pub after_detector: Option<DetectorProvenance>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Assessed {
@@ -35,6 +50,12 @@ pub(crate) struct Assessed {
     pub taint: TraceReport,
     pub complete: bool,
     pub notes: Vec<String>,
+    #[serde(default)]
+    pub snapshot: Option<EvidenceSnapshot>,
+    #[serde(default)]
+    pub evidence: Vec<EvidenceRecord>,
+    #[serde(default)]
+    pub detector: Option<DetectorProvenance>,
 }
 fn logical_key(
     root: &std::path::Path,
@@ -63,6 +84,7 @@ fn logical_key(
         .join(" ");
     identity((&file, &finding.title, &finding.category, code))
 }
+
 fn bundled(
     root: &std::path::Path,
     files: &[String],
@@ -90,6 +112,30 @@ pub(crate) fn assess(
     sources: &BTreeMap<String, String>,
 ) -> Result<Assessed> {
     let (mut findings, mut notes) = bundled(root, files, sources)?;
+    let rule_sources: BTreeMap<_, _> = files
+        .iter()
+        .filter_map(|file| {
+            sources
+                .get(file)
+                .map(|source| (file.clone(), identity(source)))
+        })
+        .collect();
+    let graph_sources: BTreeMap<_, _> = snapshot
+        .files
+        .iter()
+        .map(|file| (file.path.clone(), file.content_hash.clone()))
+        .collect();
+    for (file, rule_hash) in &rule_sources {
+        if graph_sources
+            .get(file)
+            .is_some_and(|graph_hash| graph_hash != rule_hash)
+        {
+            notes.push(format!(
+                "{file}: source changed between graph indexing and rule assessment"
+            ));
+        }
+    }
+    let evidence_snapshot = EvidenceSnapshot::new(rule_sources, graph_sources);
     let mut taint = trace_snapshot(snapshot, TraceLimits::default());
     taint
         .paths
@@ -102,12 +148,43 @@ pub(crate) fn assess(
         .iter()
         .map(|f| logical_key(root, f, sources))
         .collect();
+    let detector = DetectorProvenance {
+        engine_version: env!("CARGO_PKG_VERSION").into(),
+        rule_set_id: sentinel_scanner::rules::embedded_rule_set_id(),
+        semantics_revision: ANALYSIS_SEMANTICS_REVISION,
+    };
+    let evidence = findings.iter().map(|finding| {
+        let file = finding.file.strip_prefix(root).unwrap_or(&finding.file)
+            .to_string_lossy().replace('\\', "/");
+        let traces: Vec<_> = taint.paths.iter().filter(|path| {
+            finding.evidence.iter().any(|item| item == &format!("flow_id: {}", path.id))
+        }).cloned().collect();
+        EvidenceRecord {
+            schema_version: 1,
+            finding_id: finding.id.clone(),
+            snapshot_id: evidence_snapshot.id.clone(),
+            location: Location { file, start_line: finding.line, end_line: finding.line },
+            detector: detector.clone(),
+            assessment: CandidateAssessment::NeedsValidation,
+            confidence_basis: if traces.is_empty() {
+                "Syntactic rule match; runtime API identity and exploitability are unverified".into()
+            } else {
+                "Bounded syntactic interprocedural trace; confidence is heuristic, not a probability".into()
+            },
+            assumptions: vec!["Graph and rule manifests cover declared analysis scope only".into(),
+                "No target code was executed; a match is a candidate, not confirmed exploitation".into()],
+            traces,
+        }
+    }).collect();
     Ok(Assessed {
         findings,
         keys,
         taint,
         complete,
         notes,
+        snapshot: Some(evidence_snapshot),
+        evidence,
+        detector: Some(detector),
     })
 }
 fn base_snapshot(
@@ -238,6 +315,9 @@ pub(crate) fn compare(
     let remaining_taint_paths = after.taint.paths.clone();
     let mut coverage_notes = before.notes;
     coverage_notes.extend(after.notes);
+    if before.snapshot.is_none() {
+        coverage_notes.push("Legacy baseline has no typed source manifest; historical evidence was not reconstructed".into());
+    }
     if !complete {
         coverage_notes.push("Incomplete comparison: resolution is withheld and absence of new findings cannot establish PASS.".into());
     }
@@ -256,6 +336,12 @@ pub(crate) fn compare(
         coverage_notes,
         omitted_count: 0,
         duration_ms,
+        before_snapshot: before.snapshot,
+        after_snapshot: after.snapshot,
+        before_evidence: before.evidence,
+        after_evidence: after.evidence,
+        before_detector: before.detector,
+        after_detector: after.detector,
     }
 }
 impl Engine {
@@ -373,5 +459,40 @@ impl Engine {
             after,
             start.elapsed().as_millis(),
         ))
+    }
+}
+
+#[cfg(test)]
+mod evidence_tests {
+    use super::*;
+    #[test]
+    fn changed_source_after_indexing_is_incomplete() {
+        let original = "import hashlib\nvalue = hashlib.md5(password)\n";
+        let indexed =
+            sentinel_ast::security::extract_security_file("test", "main.py", original).unwrap();
+        let snapshot = Snapshot {
+            files: vec![indexed],
+            edges: vec![],
+            stats: IndexStats {
+                complete: true,
+                ..Default::default()
+            },
+        };
+        let sources = BTreeMap::from([(
+            "main.py".into(),
+            "import hashlib\nvalue = hashlib.sha256(password)\n".into(),
+        )]);
+        let assessed = assess(
+            std::path::Path::new("."),
+            &snapshot,
+            &["main.py".into()],
+            &sources,
+        )
+        .unwrap();
+        assert!(!assessed.complete);
+        assert!(assessed
+            .notes
+            .iter()
+            .any(|note| note.contains("source changed")));
     }
 }

@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/cloudflare/security-audit-skill",
+  "revision": "c1c8a8c1471069fb0e188eeaff69b8e8db6564a8",
+  "license": "MIT",
+  "vendored_directory": "upstream/security-audit",
+  "modifications": "Upstream files are unmodified. Sentinel provides a separate adapter and runs the exported validator functions against bounded JSON."
+}

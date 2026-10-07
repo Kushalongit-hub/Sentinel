@@ -10,8 +10,10 @@ use std::{
     time::Instant,
 };
 pub mod analysis;
+pub mod audit_workflow;
 pub mod context;
 pub mod diff;
+pub mod jobs;
 pub mod verification;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -177,7 +179,9 @@ impl Engine {
                 break;
             }
             let hash = identity(&source);
-            if let Some(old) = previous.get(&path).filter(|f| f.content_hash == hash) {
+            if let Some(old) = previous.get(&path).filter(|f| {
+                f.content_hash == hash && f.semantics_revision == ANALYSIS_SEMANTICS_REVISION
+            }) {
                 current.push(old.clone());
                 stats.unchanged_files += 1;
                 continue;
@@ -262,10 +266,10 @@ impl Engine {
             delete_file(&tx, &self.project_id, path)?;
         }
         for file in &current {
-            if previous
-                .get(&file.path)
-                .is_some_and(|f| f.content_hash == file.content_hash)
-            {
+            if previous.get(&file.path).is_some_and(|f| {
+                f.content_hash == file.content_hash
+                    && f.semantics_revision == file.semantics_revision
+            }) {
                 continue;
             }
             delete_file(&tx, &self.project_id, &file.path)?;

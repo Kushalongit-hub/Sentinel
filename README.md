@@ -3,7 +3,20 @@
 A local-first security intelligence engine for humans and AI coding agents.
 Audit code, follow cross-function input flows, retrieve ranked security context,
 and verify patches through a persistent graph, CLI, TUI, or stdio MCP.
-The default scan uses 19 embedded rules and requires no external scanner or network.
+The default scan uses 22 embedded rules and requires no external scanner or network.
+
+Recent security checklist improvements include audit findings for permissive CORS,
+unverified JWT decoding, and explicitly enabled Python debug servers. These checks
+identify review points; JWT decoding for display and permissive CORS for public
+resources may be intentional. Existing graph analysis traces XSS, SQL injection,
+command injection, and path traversal. CI actions are pinned to immutable commits,
+checkout credentials are not retained, token permissions are read-only, and jobs
+have a 20-minute limit.
+
+MFA, password reset, webhook replay protection, rate limiting, upload policies,
+and business logic require application-specific threat modeling and runtime tests.
+Sentinel is a local CLI and does not provide those application services. AI output
+remains advisory and is never executed or used to override deterministic findings.
 Optional Semgrep/Bandit scans and AI explanations must be requested explicitly.
 Explain findings or the codebase with local Ollama, NVIDIA NIM, or both models
 concurrently using the same context snapshot.
@@ -12,10 +25,16 @@ Sentinel is currently suitable for evaluation and controlled pilots. Its rule
 coverage and approximate taint analysis have not been independently benchmarked;
 a successful scan is not a guarantee that a project has no vulnerabilities.
 
+Implementation of the [competitive roadmap](docs/competitive-roadmap.md) has started
+with a [reproducible CLI benchmark](benchmarks/README.md). Its 26 development cases
+measure labelled rule behavior; they do not establish production accuracy or a
+competitive advantage.
+
 ## Contents
 
 - [Terminal workspace](#terminal-workspace)
 - [Security intelligence and agents](#security-intelligence-and-agents)
+- [Evidence-based audit workflow](#evidence-based-audit-workflow)
 - [Patch verification and baselines](#patch-verification-and-baselines)
 - [Build and run](#build-and-run)
 - [Changed-file scans](#changed-file-scans)
@@ -587,6 +606,7 @@ run in cancellable background processes, keeping navigation responsive.
 | Tab / Shift+Tab / 1-5 | Switch views |
 | a / d | Audit project / scan Git changes |
 | g / w | Index security graph / verify patch |
+| u | Inspect imported audit coverage, review verdicts and source freshness |
 | j / k / arrows | Select finding or rule / scroll text |
 | PageUp / PageDown / Home | Scroll evidence / reset |
 | / / p / t | Filter findings / project path / exit threshold |
@@ -603,7 +623,38 @@ an explicit compact-terminal message below 65 columns or 18 rows. Raw mode and t
 alternate screen restore on exit/errors/panics. Redirected input/output retains
 the simple line interface. The image is rendered from an actual styled test buffer.
 
+## Evidence-based audit workflow
+
+Use the bundled Cloudflare workflow with Sentinel's source evidence:
+
+```sh
+sentinel audit-workflow init /path/to/project --output /external/new-run
+sentinel audit-workflow validate /path/to/project --run /external/new-run
+sentinel audit-workflow import /path/to/project --run /external/new-run
+sentinel audit-workflow status /path/to/project
+```
+
+Initialization seeds planned coverage; an agent performs the audit and independent
+review. Validation/import require Node.js and reject stale source, invalid schemas,
+unaccounted candidates, and missing confirmation attestations. Imported audits
+remain separate from deterministic scan findings and patch gates. Press `u` in
+the TUI to inspect the latest retained report and source freshness.
+
+SQLite schema v6 retains content-addressed audit revisions and normalized coverage,
+attempts, candidates and reviews in one import transaction. Legacy records remain
+readable. Patch comparisons now include typed source manifests and candidate
+evidence with detector identity; legacy baselines lacking provenance return WARN
+until replaced with a reviewed fresh baseline.
+
+See [the complete audit workflow guide](docs/audit-workflow.md) for skill export,
+coverage contracts, review records, bounds and the execution isolation requirement.
+
 ## Security intelligence and agents
+
+Sentinel also embeds a pinned Cloudflare security audit skill and its validators.
+See [the audit workflow guide](docs/audit-workflow.md) for agent setup and evidence
+requirements. The MCP server exposes thirteen tools, including audit workflow and
+retained audit status queries.
 
 ```sh
 sentinel index .
@@ -641,7 +692,7 @@ flowchart LR
     Graph --> AST["sentinel-ast<br/>Tree-sitter definitions, imports, compact IR"]
     Graph --> Trace["sentinel-taint<br/>bounded parameter / return propagation"]
     Graph --> Rules["sentinel-scanner<br/>embedded rules and bounded Git reads"]
-    Graph --> DB[("sentinel-db<br/>SQLite schema v4")]
+    Graph --> DB[("sentinel-db<br/>SQLite schema v6")]
     CLI -. "optional explanations" .-> AI["sentinel-llm<br/>local / NVIDIA NIM / both"]
     classDef engine fill:#dbeafe,stroke:#2563eb,color:#172554;
     classDef optional fill:#fef3c7,stroke:#d97706,color:#78350f;
@@ -755,3 +806,9 @@ triggering source; semantic rewrites/renames can appear as new occurrences.
 Baselines are tied to the canonical local repository root. This MVP is bounded
 security evidence for review and controlled pilots, not an independently validated
 proof that code is safe.
+
+## Resumable static jobs
+
+Create a persistent job with `sentinel job create /path/to/project`, then use its returned ID with `sentinel job resume ID --project /path/to/project --max-units 5`. Status and cancellation use `sentinel job status ID` and `sentinel job cancel ID` with the same project option. See [job scope and budget behavior](docs/static-jobs.md). These jobs do not execute target code or AI models.
+
+Use `sentinel scan-file relative/file.py --project /path/to/project` for the same rule-plus-graph scan used by MCP. Audit revision metadata is available through `sentinel audit-workflow history` and the repository-bound `sentinel_get_audit_history` MCP tool.

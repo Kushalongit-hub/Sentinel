@@ -1,5 +1,7 @@
 //! Portable, deterministic contracts for repository security intelligence.
 use serde::{Deserialize, Serialize};
+/// Increment when source extraction, resolution or flow interpretation semantics change.
+pub const ANALYSIS_SEMANTICS_REVISION: u32 = 2;
 
 /// A project-relative source location; line numbers are one-based and inclusive.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -101,6 +103,8 @@ pub struct Annotation {
 /// Cached AST-derived data for a file; the file hash determines whether reparsing is needed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexedFile {
+    #[serde(default)]
+    pub semantics_revision: u32,
     pub path: String,
     pub language: String,
     pub content_hash: String,

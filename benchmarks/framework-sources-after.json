@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "corpus_sha256": "89b87a3e47392f68083b46c47aaf5a0241fd5a765b73335793a195b813a0df48",
+  "binary_sha256": "727fc1b782d71a1d26ef9cd81c0c614bda98ef82dff78f088cacf526e07da2ac",
+  "split": "development",
+  "scope": "case-level detection of mapped rules; additional findings are unscored",
+  "summary": {
+    "tp": 2,
+    "fp": 0,
+    "tn": 2,
+    "fn": 0,
+    "failed": 0,
+    "precision": {
+      "value": 1.0,
+      "wilson_95": [
+        0.34238022750665303,
+        1.0
+      ],
+      "denominator": 2
+    },
+    "recall": {
+      "value": 1.0,
+      "wilson_95": [
+        0.34238022750665303,
+        1.0
+      ],
+      "denominator": 2
+    },
+    "complete_cases": 4,
+    "total_cases": 4
+  },
+  "per_class": {
+    "path-traversal": {
+      "tp": 1,
+      "fp": 0,
+      "tn": 1,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "complete_cases": 2,
+      "total_cases": 2
+    },
+    "sql-injection": {
+      "tp": 1,
+      "fp": 0,
+      "tn": 1,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "complete_cases": 2,
+      "total_cases": 2
+    }
+  },
+  "per_engine": {
+    "graph": {
+      "tp": 2,
+      "fp": 0,
+      "tn": 2,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "complete_cases": 4,
+      "total_cases": 4
+    }
+  },
+  "cases": [
+    {
+      "id": "fastify-request-body-positive",
+      "family": "fastify-request-body",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "c4a5a906bc9bc4b1037c379b6a2f1ca74630e7ee467c75b38875e6fc4dcbd12e",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 1,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 4328.906099995947
+    },
+    {
+      "id": "fastify-request-body-safe",
+      "family": "fastify-request-body",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "57b7bdb8d28c489078093df0c25f45cc7202d8a7f4285b8020dd6316135659e2",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 44.014200000674464
+    },
+    {
+      "id": "fastapi-query-params-positive",
+      "family": "fastapi-query-params",
+      "class": "path-traversal",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "f863f91eaa8b6b2d1564b2e3917795058fda2eeaf20a2701d006aa6a87429b04",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-path-traversal",
+          "line": 2,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 47.30510000081267
+    },
+    {
+      "id": "fastapi-query-params-safe",
+      "family": "fastapi-query-params",
+      "class": "path-traversal",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "1941945b05a763fdca6e489ff3c12f701b54473d789792e2a7407ed248d41017",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 66.77839999611024
+    }
+  ]
+}
