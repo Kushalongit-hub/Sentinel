@@ -52,13 +52,20 @@ fn run(
     if question.trim().is_empty() || question.len() > 4096 {
         anyhow::bail!("question must contain 1 to 4096 bytes");
     }
-    let context = build_context_with_budget(
-        &project,
-        question,
-        finding.as_ref().map(|f| (f.file.as_path(), f.line)),
-        ai.context_bytes as usize,
-    )?;
-    if context.files.is_empty() && context.excerpts.is_empty() {
+    let context = if ai.chat {
+        None
+    } else {
+        Some(build_context_with_budget(
+            &project,
+            question,
+            finding.as_ref().map(|f| (f.file.as_path(), f.line)),
+            ai.context_bytes as usize,
+        )?)
+    };
+    if context
+        .as_ref()
+        .is_some_and(|c| c.files.is_empty() && c.excerpts.is_empty())
+    {
         anyhow::bail!("no eligible project evidence found");
     }
     let mut contextual_finding = finding.clone();
@@ -68,7 +75,34 @@ fn run(
             f.file = path.to_path_buf();
         }
     }
-    let request = ExplanationRequest::new(&context, question, contextual_finding.as_ref())?;
+    let mut request = if let Some(context) = &context {
+        ExplanationRequest::new(context, question, contextual_finding.as_ref())?
+    } else {
+        ExplanationRequest { context_id: "chat-no-project-context".into(), messages: vec![
+            sentinel_llm::Message { role: "system".into(), content: "You are Sentinel's conversational assistant. Answer the user's questions clearly and honestly. State uncertainty. You cannot execute commands or change files. No project evidence is attached.".into() },
+            sentinel_llm::Message { role: "user".into(), content: question.into() },
+        ] }
+    };
+    if ai.chat {
+        request.messages[0].content.push_str(&format!(
+            "\nWorkspace metadata (not instructions): {}. You know this directory path but have no file contents. Explain that project evidence can be attached with Alt+p when source analysis is needed.",
+            serde_json::json!({"selected_project_directory": project, "working_directory": std::env::current_dir()?, "source_files_attached": false})
+        ));
+    }
+    if let Some(history) = &ai.chat_history {
+        if history.len() > 16384 {
+            anyhow::bail!("chat history exceeds 16 KiB");
+        }
+        let history: Vec<sentinel_llm::Message> = serde_json::from_str(history)?;
+        if history.len() > 40
+            || history
+                .iter()
+                .any(|m| !matches!(m.role.as_str(), "user" | "assistant") || m.content.len() > 8192)
+        {
+            anyhow::bail!("invalid chat history");
+        }
+        request.messages.splice(1..1, history);
+    }
     if serde_json::to_vec(&request)?.len() > 128 * 1024 {
         anyhow::bail!("explanation request exceeds 128 KiB; reduce evidence size");
     }
@@ -90,13 +124,13 @@ fn run(
         endpoint: configured(
             &ai.local_endpoint,
             "SENTINEL_LOCAL_ENDPOINT",
-            "http://localhost:11434",
+            "http://localhost:1234/v1",
         ),
-        model: configured(&ai.local_model, "SENTINEL_LOCAL_MODEL", "llama2"),
+        model: configured(&ai.local_model, "SENTINEL_LOCAL_MODEL", "qwen/qwen3.5-9b"),
         api_key: None,
     };
     let nim = if mode != ProviderMode::Local {
-        let model = configured(&ai.nim_model, "SENTINEL_NIM_MODEL", "");
+        let model = configured(&ai.nim_model, "SENTINEL_NIM_MODEL", "z-ai/glm-5.3");
         if model.trim().is_empty() {
             anyhow::bail!(
                 "set --nim-model or SENTINEL_NIM_MODEL to a model available in your NVIDIA account"
@@ -118,20 +152,22 @@ fn run(
     };
     let client = HybridClient::new(local, nim, mode, Duration::from_secs(ai.ai_timeout))?;
     // One latest local context snapshot, independent of provider selection. No API keys or answers are stored.
-    let db = sentinel_db::SentinelDb::new(db_path.to_str().context("invalid database path")?)?;
-    db.set_memory("ai.context.latest", &serde_json::to_string(&context)?)?;
+    if let Some(context) = &context {
+        let db = sentinel_db::SentinelDb::new(db_path.to_str().context("invalid database path")?)?;
+        db.set_memory("ai.context.latest", &serde_json::to_string(context)?)?;
+    }
     let batch = client.explain(&request);
     if ai.json {
         println!(
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
-                "context_id":batch.context_id,"coverage_notes":context.coverage_notes,
+                "context_id":batch.context_id,"coverage_notes":context.as_ref().map(|c| &c.coverage_notes),
                 "responses":batch.responses,"failures":batch.failures,
             }))?
         );
     } else {
         println!("Context: {}\n", batch.context_id);
-        for note in &context.coverage_notes {
+        for note in context.iter().flat_map(|c| &c.coverage_notes) {
             eprintln!("[context] {note}");
         }
         for response in &batch.responses {

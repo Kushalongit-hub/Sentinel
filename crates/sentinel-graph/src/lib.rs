@@ -560,9 +560,15 @@ pub fn resolve_edges(project: &str, files: &[IndexedFile]) -> Vec<SecurityEdge> 
             });
         }
         for import in &file.imports {
-            let target = files
+            let targets = files
                 .iter()
-                .find(|f| module_matches(&file.path, &import.module, &f.path));
+                .filter(|f| module_matches(&file.path, &import.module, &f.path))
+                .collect::<Vec<_>>();
+            let target = if targets.len() == 1 {
+                Some(targets[0])
+            } else {
+                None
+            };
             edges.push(SecurityEdge {
                 from: file_id.clone(),
                 to: target
@@ -587,6 +593,14 @@ pub fn resolve_edges(project: &str, files: &[IndexedFile]) -> Vec<SecurityEdge> 
                     } else {
                         import.imported.as_str()
                     };
+                    if files
+                        .iter()
+                        .filter(|f| module_matches(&file.path, &import.module, &f.path))
+                        .count()
+                        != 1
+                    {
+                        continue;
+                    }
                     candidates.extend(symbols.iter().copied().filter(|s| {
                         s.name == wanted
                             && module_matches(&file.path, &import.module, &s.location.file)
@@ -595,11 +609,34 @@ pub fn resolve_edges(project: &str, files: &[IndexedFile]) -> Vec<SecurityEdge> 
             }
             if candidates.is_empty() {
                 if parts.len() == 1 {
-                    candidates.extend(
-                        file.symbols
+                    let mut scope = symbols
+                        .iter()
+                        .find(|s| s.id == call.owner)
+                        .map(|s| s.qualified_name.as_str())
+                        .unwrap_or("");
+                    loop {
+                        let wanted = if scope.is_empty() {
+                            short.to_string()
+                        } else {
+                            format!("{scope}.{short}")
+                        };
+                        let local = file
+                            .symbols
                             .iter()
-                            .filter(|s| s.name == short && s.kind != "module"),
-                    );
+                            .filter(|s| s.qualified_name == wanted && s.kind != "module")
+                            .collect::<Vec<_>>();
+                        if !local.is_empty() {
+                            candidates.extend(local);
+                            break;
+                        }
+                        if scope.is_empty() {
+                            break;
+                        }
+                        scope = scope
+                            .rsplit_once('.')
+                            .map(|(parent, _)| parent)
+                            .unwrap_or("");
+                    }
                 } else if matches!(parts.first().copied(), Some("self" | "this")) {
                     if let Some(owner) = symbols.iter().find(|s| s.id == call.owner) {
                         let scope = owner
@@ -614,6 +651,15 @@ pub fn resolve_edges(project: &str, files: &[IndexedFile]) -> Vec<SecurityEdge> 
                         );
                     }
                 }
+            }
+            if parts.len() == 1
+                && file.imports.iter().any(|i| i.local == short)
+                && file
+                    .symbols
+                    .iter()
+                    .any(|s| s.name == short && s.kind != "module")
+            {
+                candidates.clear();
             }
             let resolved = candidates.len() == 1;
             let to = if resolved {

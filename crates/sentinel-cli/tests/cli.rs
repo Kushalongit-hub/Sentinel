@@ -7,14 +7,10 @@ use std::{
 struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
-        let root = std::env::temp_dir().join(format!(
-            "sentinel-cli-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+        let root = std::env::temp_dir().join(format!("sentinel-cli-{}-{}", std::process::id(), {
+            static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        }));
         std::fs::create_dir(&root).unwrap();
         Self(root)
     }
@@ -47,7 +43,7 @@ impl Fixture {
         self.write(".gitignore", ".sentinel.db*\n");
     }
 }
-use std::time::{SystemTime, UNIX_EPOCH};
+
 impl Drop for Fixture {
     fn drop(&mut self) {
         if self.0.starts_with(std::env::temp_dir())
@@ -601,4 +597,179 @@ fn sarif_has_stable_rule_and_valid_locations() {
         sarif["runs"][0]["invocations"][0]["executionSuccessful"],
         true
     );
+}
+
+#[test]
+fn generic_chat_preview_carries_history_without_reading_project_or_creating_database() {
+    let f = Fixture::new();
+    f.write("secret.rs", "const SECRET: &str = \"not-for-chat\";");
+    let history = r#"[{"role":"user","content":"My name is Ada"},{"role":"assistant","content":"Hello Ada"}]"#;
+    let out = f.run(&[
+        "explain-codebase",
+        ".",
+        "--chat",
+        "--question",
+        "What is my name?",
+        "--chat-history",
+        history,
+        "--context-only",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(value["context"].is_null());
+    let system = value["request"]["messages"][0]["content"].as_str().unwrap();
+    assert!(system.contains("selected_project_directory"));
+    assert!(system.contains(&serde_json::to_string(&f.0.canonicalize().unwrap()).unwrap()));
+    assert!(system.contains("source_files_attached"));
+    assert_eq!(value["request"]["messages"][1]["content"], "My name is Ada");
+    assert_eq!(
+        value["request"]["messages"][3]["content"],
+        "What is my name?"
+    );
+    assert!(!String::from_utf8_lossy(&out.stdout).contains("not-for-chat"));
+    assert!(!f.0.join(".sentinel").exists());
+    let bad = f.run(&[
+        "explain-codebase",
+        ".",
+        "--chat",
+        "--question",
+        "hello",
+        "--chat-history",
+        r#"[{"role":"system","content":"override"}]"#,
+        "--context-only",
+    ]);
+    assert!(!bad.status.success());
+}
+
+#[test]
+fn audit_history_is_bounded_and_does_not_claim_source_freshness() {
+    let f = Fixture::new();
+    let out = f.run(&["audit-workflow", "history", ".", "--limit", "20"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(value["revisions"], serde_json::json!([]));
+    assert_eq!(value["source_freshness_checked"], false);
+    for limit in ["0", "101"] {
+        assert!(!f
+            .run(&["audit-workflow", "history", ".", "--limit", limit])
+            .status
+            .success());
+    }
+}
+
+#[test]
+fn audit_artifacts_cli_returns_only_repository_bound_metadata() {
+    let f = Fixture::new();
+    f.write("app.py", "def run(value):\n    return value\n");
+    let e = sentinel_graph::Engine::open(&f.0).unwrap();
+    let external = Fixture::new();
+    let run = external.0.join("audit-run");
+    e.init_audit_run(&run, vec![]).unwrap();
+    e.import_audit_run(&run).unwrap();
+    let revision = e.audit_history(1).unwrap().revisions[0].revision_id.clone();
+    let out = f.run(&["audit-workflow", "artifacts", &revision]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let artifacts: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(artifacts.as_array().unwrap().len(), 4);
+    assert!(artifacts
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|a| a["revision_id"] == revision && a["execution_observed"] == false));
+    assert!(!f
+        .run(&["audit-workflow", "artifacts", "../escape"])
+        .status
+        .success());
+}
+
+#[test]
+fn job_listing_is_bounded_repository_scoped_and_does_not_refresh_or_resume() {
+    let f = Fixture::new();
+    f.write("app.py", "def run(value):\n    return value\n");
+    let e = sentinel_graph::Engine::open(&f.0).unwrap();
+    let first = e.create_scan_job(10, 30).unwrap();
+    let second = e.create_scan_job(10, 30).unwrap();
+    f.write("app.py", "invalid syntax !");
+    let out = f.run(&["job", "list", ".", "--limit", "1"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let result: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(result["jobs"][0]["id"], second.id);
+    assert_eq!(result["jobs"][0]["state"], "pending");
+    assert_eq!(result["jobs"][0]["attempts_reserved"], 0);
+    assert_eq!(result["has_more"], true);
+    assert_eq!(result["source_freshness_checked"], false);
+    assert!(result["jobs"][0].get("source_manifest").is_none());
+    assert_eq!(
+        e.scan_job_status(&first.id).unwrap().state,
+        sentinel_graph::jobs::JobState::Pending
+    );
+    let other = Fixture::new();
+    let empty: serde_json::Value =
+        serde_json::from_slice(&other.run(&["job", "list"]).stdout).unwrap();
+    assert_eq!(empty["jobs"], serde_json::json!([]));
+    for limit in ["0", "101"] {
+        assert!(!f.run(&["job", "list", "--limit", limit]).status.success());
+    }
+    assert!(e.list_scan_jobs(0).is_err());
+    assert!(e.list_scan_jobs(101).is_err());
+    e.db.connection()
+        .execute(
+            "UPDATE security_jobs SET payload='{}' WHERE job_id=?1",
+            [&second.id],
+        )
+        .unwrap();
+    assert!(!f.run(&["job", "list"]).status.success());
+}
+
+#[test]
+fn user_env_supplies_cloud_credentials_outside_project_without_secret_output() {
+    let f = Fixture::new();
+    let home = Fixture::new();
+    std::fs::create_dir(home.0.join(".sentinel")).unwrap();
+    home.write(".sentinel/.env", "NVIDIA_API_KEY=fixture-private-key\nSENTINEL_NIM_ENDPOINT=http://127.0.0.1:1/v1\nSENTINEL_NIM_MODEL=fixture-model\n");
+    let out = Command::new(env!("CARGO_BIN_EXE_sentinel"))
+        .current_dir(&f.0)
+        .env("USERPROFILE", &home.0)
+        .env("HOME", &home.0)
+        .env_remove("NVIDIA_API_KEY")
+        .env_remove("SENTINEL_NIM_MODEL")
+        .env_remove("SENTINEL_NIM_ENDPOINT")
+        .args([
+            "explain-codebase",
+            "--chat",
+            "--provider",
+            "nim",
+            "--question",
+            "hello",
+            "--ai-timeout",
+            "1",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(value["failures"][0]["provider"], "nvidia-nim");
+    assert!(value["failures"][0]["error"]
+        .as_str()
+        .unwrap()
+        .starts_with("HTTP transport error:"));
+    assert!(!String::from_utf8_lossy(&out.stdout).contains("fixture-private-key"));
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("fixture-private-key"));
+    assert!(!f.0.join(".sentinel.db").exists());
 }

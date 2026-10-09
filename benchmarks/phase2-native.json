@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "label_status": "Author-labelled development families; no independent labels or full framework coverage",
+  "cases": [
+    {
+      "id": "fastapi-string-route-positive",
+      "family": "fastapi-string-route",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "from fastapi import FastAPI as Web\napp = Web()\n@app.get('/search')\nasync def route(q: str):\n    cursor.execute('SELECT ' + q)\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "fastapi-string-route-safe",
+      "family": "fastapi-string-route",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "from fastapi import FastAPI as Web\napp = Web()\n@app.get('/search')\nasync def route(q: str):\n    cursor.execute('SELECT ?', (q,))\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "flask-path-route-positive",
+      "family": "flask-path-route",
+      "split": "development",
+      "class": "path-traversal",
+      "positive": true,
+      "rules": [
+        "interproc-path-traversal"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "from flask import Flask\napp = Flask(__name__)\n@app.route('/files/<path:filename>')\ndef route(filename):\n    return open(filename)\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "flask-path-route-safe",
+      "family": "flask-path-route",
+      "split": "development",
+      "class": "path-traversal",
+      "positive": false,
+      "rules": [
+        "interproc-path-traversal"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "from flask import Flask\napp = Flask(__name__)\n@app.route('/files/<path:filename>')\ndef route(filename):\n    return open('fixed.txt')\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "namespace-async-positive",
+      "family": "namespace-async",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "service.js": "export async function read(value) { return value; }\n",
+        "routes.js": "import * as service from './service.js';\nasync function route(req) { const value=await service.read(req.query.q); return db.query('SELECT ' + value); }\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "namespace-async-safe",
+      "family": "namespace-async",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "service.js": "export async function read(value) { return value; }\n",
+        "routes.js": "import * as service from './service.js';\nasync function route(req) { const value=await service.read(req.query.q); return db.query('SELECT ?', [value]); }\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "mixed-import-alias-positive",
+      "family": "mixed-import-alias",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "service.js": "export async function read(value) { return value; }\n",
+        "routes.js": "import unused, {read as take} from './service.js';\nasync function route(req) { const value=await take(req.query.q); return db.query('SELECT ' + value); }\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "mixed-import-alias-safe",
+      "family": "mixed-import-alias",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "service.js": "export async function read(value) { return value; }\n",
+        "routes.js": "import unused, {read as take} from './service.js';\nasync function route(req) { const value=await take(req.query.q); return db.query('SELECT ?', [value]); }\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "lexical-shadow-positive",
+      "family": "lexical-shadow",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "def route(request):\n    def read(value):\n        return value\n    cursor.execute('SELECT ' + read(request.args['q']))\ndef other():\n    def read(value):\n        return 'fixed'\n    return read('safe')\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "lexical-shadow-safe",
+      "family": "lexical-shadow",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "def route(request):\n    def read(value):\n        return 'fixed'\n    cursor.execute('SELECT ' + read(request.args['q']))\ndef other():\n    def read(value):\n        return value\n    return read('safe')\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "object-fields-positive",
+      "family": "object-fields",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "function route(req) { const box={raw:req.query.q, safe:'fixed'}; db.query('SELECT ' + box.raw); }\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "object-fields-safe",
+      "family": "object-fields",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "function route(req) { const box={raw:req.query.q, safe:'fixed'}; db.query('SELECT ' + box.safe); }\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "object-branch-reassignment-positive",
+      "family": "object-branch-reassignment",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "function route(req) { let box={safe:'fixed'}; if (req.query.flag) { box=req.query; } db.query('SELECT ' + box.safe); }\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    },
+    {
+      "id": "object-branch-reassignment-safe",
+      "family": "object-branch-reassignment",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "function route(req) { let box={safe:'fixed'}; if (req.query.flag) { box={safe:'also fixed'}; } db.query('SELECT ' + box.safe); }\n"
+      },
+      "rationale": "Author-labelled static source/sink regression; not independent runtime evidence"
+    }
+  ]
+}

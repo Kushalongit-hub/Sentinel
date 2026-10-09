@@ -46,3 +46,17 @@ cancel operations exit 0. Budgets cannot increase on resume.
 Analysis semantics revision 2 invalidates old cached IR even for unchanged files.
 Detector changes invalidate pending jobs. Missing or changed detector provenance
 prevents baseline comparisons from returning PASS.
+
+## Browse retained jobs
+
+`sentinel job list [project] --limit 20` lists newest job metadata first; limits
+are 1–100. In the TUI, `o` opens the latest 20 jobs in Investigation. Listings
+show recorded state, unit count, reserved attempts, elapsed/budget time, active
+file and source snapshot. Large per-file manifests and findings are omitted.
+A `has_more` flag makes truncation explicit. Lists use a consistent database read
+transaction and fail on malformed stored job contracts.
+
+Listing never indexes source, contacts a provider, executes targets, resumes work,
+or asserts freshness. `Completed` is a recorded workflow state, not a clean security
+verdict. Resume/cancel remain explicit CLI actions; source and detector identity
+are checked by resume. The browser is read-only and does not manage worker execution.

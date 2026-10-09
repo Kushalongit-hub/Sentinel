@@ -8,12 +8,16 @@ struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
         let path = std::env::temp_dir().join(format!(
-            "sentinel-graph-test-{}-{}",
+            "sentinel-graph-test-{}-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            {
+                static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            }
         ));
         std::fs::create_dir(&path).unwrap();
         Self(path)
@@ -579,4 +583,489 @@ fn baseline_does_not_resolve_existing_debt_when_source_is_newly_ignored() {
     let result = engine.verify_patch(None).unwrap();
     assert_eq!(result.verdict, Verdict::Warn);
     assert!(result.comparison.resolved_findings.is_empty());
+}
+
+#[test]
+fn request_headers_and_cookies_reach_sql_only_when_used_as_query_text() {
+    for (file, source, safe) in [
+        (
+            "routes.js",
+            "function route(req) { return db.query('SELECT ' + req.headers['x-query']); }",
+            "function route(req) { return db.query('SELECT ?', [req.headers['x-query']]); }",
+        ),
+        (
+            "routes.js",
+            "function route(req) { return db.query('SELECT ' + req.cookies.query); }",
+            "function route(req) { return db.query('SELECT ?', [req.cookies.query]); }",
+        ),
+        (
+            "routes.py",
+            "def route(request):\n    cursor.execute('SELECT ' + request.headers['x-query'])\n",
+            "def route(request):\n    cursor.execute('SELECT ?', (request.headers['x-query'],))\n",
+        ),
+        (
+            "routes.py",
+            "def route(request):\n    cursor.execute('SELECT ' + request.cookies['query'])\n",
+            "def route(request):\n    cursor.execute('SELECT ?', (request.cookies['query'],))\n",
+        ),
+    ] {
+        let f = Fixture::new();
+        f.write(file, source);
+        let engine = Engine::open(&f.0).unwrap();
+        assert_eq!(
+            engine
+                .trace(file, Some("sql-injection"), TraceLimits::default())
+                .unwrap()
+                .paths
+                .len(),
+            1
+        );
+        f.write(file, safe);
+        assert!(engine
+            .trace(file, Some("sql-injection"), TraceLimits::default())
+            .unwrap()
+            .paths
+            .is_empty());
+    }
+}
+
+#[test]
+fn lexical_resolution_namespace_aliases_and_async_returns_are_preserved() {
+    let f = Fixture::new();
+    f.write(
+        "service.js",
+        "export async function read(value) { return value; }\n",
+    );
+    f.write("routes.js", "import * as service from './service.js';\nasync function route(req) { const value = await service.read(req.query.q); return db.query('SELECT ' + value); }\n");
+    f.write("nested.py", "def route(request):\n    def read(value):\n        return value\n    cursor.execute('SELECT ' + read(request.args['q']))\ndef other():\n    def read(value):\n        return 'fixed'\n    return read('safe')\n");
+    let e = Engine::open(&f.0).unwrap();
+    assert_eq!(
+        e.trace("routes.js", Some("sql-injection"), TraceLimits::default())
+            .unwrap()
+            .paths
+            .len(),
+        1
+    );
+    assert_eq!(
+        e.trace("nested.py", Some("sql-injection"), TraceLimits::default())
+            .unwrap()
+            .paths
+            .len(),
+        1
+    );
+}
+#[test]
+fn fastapi_string_route_parameters_require_constructor_and_are_not_sql_sanitizers() {
+    let f = Fixture::new();
+    f.write("routes.py", "from fastapi import FastAPI as Web\napp = Web()\n@app.get('/search')\nasync def route(q: str):\n    cursor.execute('SELECT ' + q)\n");
+    let e = Engine::open(&f.0).unwrap();
+    assert_eq!(
+        e.trace("routes.py", Some("sql-injection"), TraceLimits::default())
+            .unwrap()
+            .paths
+            .len(),
+        1
+    );
+    f.write("routes.py", "from fastapi import FastAPI as Web\napp = Web()\n@app.get('/search')\nasync def route(q: str):\n    cursor.execute('SELECT ?', (q,))\n");
+    assert!(e
+        .trace("routes.py", Some("sql-injection"), TraceLimits::default())
+        .unwrap()
+        .paths
+        .is_empty());
+    f.write(
+        "routes.py",
+        "@app.get('/search')\ndef route(q: str):\n    cursor.execute('SELECT ' + q)\n",
+    );
+    assert!(e
+        .trace("routes.py", Some("sql-injection"), TraceLimits::default())
+        .unwrap()
+        .paths
+        .is_empty());
+}
+
+#[test]
+fn literal_object_fields_distinguish_safe_values_and_invalidate_on_reassignment() {
+    let f = Fixture::new();
+    let e = Engine::open(&f.0).unwrap();
+    for (source,count) in [
+        ("function route(req) { const box = { raw:req.query.q, safe:'fixed' }; db.query('SELECT ' + box.safe); }",0),
+        ("function route(req) { const box = { raw:req.query.q, safe:'fixed' }; db.query('SELECT ' + box.raw); }",1),
+        ("function route(req) { let box = { safe:'fixed' }; box=req.query; db.query('SELECT ' + box.safe); }",1),
+        ("function route(req) { let box = { safe:'fixed' }; if (req.query.flag) { box=req.query; } db.query('SELECT ' + box.safe); }",1),
+        ("function route(req) { const box = { safe:'fixed', [req.query.key]:req.query.q }; db.query('SELECT ' + box.safe); }",1),
+    ] {
+        f.write("routes.js",source);
+        assert_eq!(e.trace("routes.js",Some("sql-injection"),TraceLimits::default()).unwrap().paths.is_empty(),count == 0, "{source}");
+    }
+}
+
+#[test]
+fn ambiguous_import_modules_and_default_exports_are_not_guessed() {
+    let f = Fixture::new();
+    std::fs::create_dir(f.0.join("src")).unwrap();
+    f.write("service.js", "export function send(x) { return x; }\n");
+    f.write(
+        "src/service.js",
+        "export function different(x) { return x; }\n",
+    );
+    f.write("routes.js", "import { send as run } from 'service';\nfunction route(req) { return run(req.query.q); }\n");
+    let e = Engine::open(&f.0).unwrap();
+    e.index().unwrap();
+    let snapshot = e.snapshot().unwrap();
+    assert!(snapshot
+        .edges
+        .iter()
+        .any(|edge| edge.kind == "IMPORTS" && !edge.resolved));
+    assert!(snapshot
+        .edges
+        .iter()
+        .any(|edge| edge.name == "run" && !edge.resolved));
+    f.write(
+        "routes.js",
+        "import send from './service.js';\nfunction route(req) { return send(req.query.q); }\n",
+    );
+    e.index().unwrap();
+    assert!(e
+        .snapshot()
+        .unwrap()
+        .edges
+        .iter()
+        .any(|edge| edge.name == "send" && !edge.resolved));
+}
+
+#[test]
+fn flask_path_string_parameters_are_sources_only_for_recognized_routes() {
+    let f = Fixture::new();
+    f.write("routes.py", "from flask import Flask\napp = Flask(__name__)\n@app.route('/files/<path:filename>')\ndef route(filename):\n    return open(filename)\n");
+    let e = Engine::open(&f.0).unwrap();
+    assert!(!e
+        .trace("routes.py", Some("path-traversal"), TraceLimits::default())
+        .unwrap()
+        .paths
+        .is_empty());
+    f.write("routes.py", "from flask import Flask\napp = Flask(__name__)\n@app.route('/files/<path:filename>')\ndef route(filename):\n    return open('fixed.txt')\n");
+    assert!(e
+        .trace("routes.py", Some("path-traversal"), TraceLimits::default())
+        .unwrap()
+        .paths
+        .is_empty());
+}
+
+#[test]
+fn trace_backend_provenance_is_source_bound_and_legacy_provenance_is_unknown() {
+    let f = Fixture::new();
+    f.write(
+        "routes.py",
+        "def route(request):\n    return open(request.args['path'])\n",
+    );
+    let e = Engine::open(&f.0).unwrap();
+    let before = e.trace("routes.py", None, TraceLimits::default()).unwrap();
+    assert_eq!(before.backend.as_ref().unwrap().name, "sentinel-native");
+    assert_eq!(
+        before.backend.as_ref().unwrap().semantics_revision,
+        sentinel_core::security::ANALYSIS_SEMANTICS_REVISION
+    );
+    f.write(
+        "routes.py",
+        "def route(request):\n    return open('fixed.txt')\n",
+    );
+    let after = e.trace("routes.py", None, TraceLimits::default()).unwrap();
+    assert_ne!(before.source_snapshot, after.source_snapshot);
+    let legacy: sentinel_core::security::TraceReport=serde_json::from_value(serde_json::json!({"paths":[],"nodes_visited":0,"duration_ms":0,"complete":true,"coverage_notes":[]})).unwrap();
+    assert!(legacy.backend.is_none() && legacy.source_snapshot.is_none());
+}
+
+#[test]
+fn unsupported_fastapi_parameters_are_explicitly_incomplete() {
+    let f = Fixture::new();
+    f.write("routes.py", "from fastapi import FastAPI, Depends\napp = FastAPI()\n@app.get('/search')\ndef route(q: str, db = Depends(connect)):\n    return db.execute(q)\n");
+    let e = Engine::open(&f.0).unwrap();
+    let report = e.trace("routes.py", None, TraceLimits::default()).unwrap();
+    assert!(!report.complete);
+    assert!(report
+        .coverage_notes
+        .iter()
+        .any(|note| note.contains("Framework route/parameter")));
+}
+
+#[test]
+fn flask_http_shortcuts_and_unsupported_routes_report_coverage() {
+    let f = Fixture::new();
+    let e = Engine::open(&f.0).unwrap();
+    for method in ["get", "post", "put", "patch", "delete"] {
+        f.write("routes.py", &format!("from flask import Flask\napp = Flask(__name__)\n@app.{method}('/files/<path:filename>')\ndef route(filename):\n    return open(filename)\n"));
+        let report = e
+            .trace("routes.py", Some("path-traversal"), TraceLimits::default())
+            .unwrap();
+        assert!(report.complete, "{method}: {:?}", report.coverage_notes);
+        assert!(!report.paths.is_empty(), "{method}");
+    }
+    for path in ["configured_path", "'/files/<custom:filename>'"] {
+        f.write("routes.py", &format!("from flask import Flask\napp = Flask(__name__)\n@app.route({path})\ndef route(filename):\n    return open(filename)\n"));
+        let report = e.trace("routes.py", None, TraceLimits::default()).unwrap();
+        assert!(!report.complete, "{path}");
+        assert!(report
+            .coverage_notes
+            .iter()
+            .any(|note| note.contains("Framework route/parameter")));
+    }
+}
+
+#[test]
+fn flask_keyword_rules_are_sources_and_interpolated_rules_are_incomplete() {
+    let f = Fixture::new();
+    let e = Engine::open(&f.0).unwrap();
+    for decorator in [
+        "app.route(rule='/files/<path:filename>')",
+        "app.get(rule='/files/<path:filename>')",
+    ] {
+        f.write("routes.py", &format!("from flask import Flask\napp = Flask(__name__)\n@{decorator}\ndef route(filename):\n    return open(filename)\n"));
+        let report = e
+            .trace("routes.py", Some("path-traversal"), TraceLimits::default())
+            .unwrap();
+        assert!(report.complete, "{:?}", report.coverage_notes);
+        assert!(!report.paths.is_empty());
+    }
+    for rule in [
+        "f'/files/{converter}'",
+        "rule=f'/files/{converter}'",
+        "rule=configured_path",
+    ] {
+        f.write("routes.py", &format!("from flask import Flask\napp = Flask(__name__)\n@app.route({rule})\ndef route(filename):\n    return open(filename)\n"));
+        let report = e.trace("routes.py", None, TraceLimits::default()).unwrap();
+        assert!(!report.complete, "{rule}");
+    }
+}
+
+#[test]
+fn framework_namespace_constructors_and_rebindings_are_distinguished() {
+    let f = Fixture::new();
+    let e = Engine::open(&f.0).unwrap();
+    for (import, constructor, decorator, params) in [
+        (
+            "import fastapi as api",
+            "api.FastAPI",
+            "app.get('/search')",
+            "q: str",
+        ),
+        (
+            "import flask as web",
+            "web.Flask",
+            "app.route('/search/<q>')",
+            "q",
+        ),
+        (
+            "from fastapi import FastAPI",
+            "FastAPI",
+            "app.get('/search')",
+            "q: str",
+        ),
+    ] {
+        for rebound in [false, true] {
+            let assignment = if rebound {
+                format!("{constructor} = other\n")
+            } else {
+                String::new()
+            };
+            f.write("routes.py", &format!("{import}\n{assignment}app = {constructor}('test')\n@{decorator}\ndef route({params}):\n    return db.execute(q)\n"));
+            let report = e
+                .trace("routes.py", Some("sql-injection"), TraceLimits::default())
+                .unwrap();
+            assert_eq!(
+                report.paths.is_empty(),
+                rebound,
+                "{constructor}: rebound={rebound}"
+            );
+        }
+    }
+}
+
+#[test]
+fn framework_imports_must_precede_routes_in_module_scope() {
+    let f = Fixture::new();
+    let e = Engine::open(&f.0).unwrap();
+    for prefix in [
+        "def unrelated():\n    from fastapi import FastAPI\n",
+        "def unrelated():\n    import fastapi as api\n",
+    ] {
+        let constructor = if prefix.contains("as api") {
+            "api.FastAPI"
+        } else {
+            "FastAPI"
+        };
+        f.write("routes.py", &format!("{prefix}app = {constructor}()\n@app.get('/search')\ndef route(q: str):\n    return db.execute(q)\n"));
+        assert!(e
+            .trace("routes.py", Some("sql-injection"), TraceLimits::default())
+            .unwrap()
+            .paths
+            .is_empty());
+    }
+    f.write("routes.py", "app = FastAPI()\n@app.get('/search')\ndef route(q: str):\n    return db.execute(q)\nfrom fastapi import FastAPI\n");
+    assert!(e
+        .trace("routes.py", Some("sql-injection"), TraceLimits::default())
+        .unwrap()
+        .paths
+        .is_empty());
+    f.write("routes.py", "from fastapi import FastAPI\napp = FastAPI()\n@app.get('/search')\ndef route(q: str):\n    return db.execute(q)\n");
+    assert!(!e
+        .trace("routes.py", Some("sql-injection"), TraceLimits::default())
+        .unwrap()
+        .paths
+        .is_empty());
+}
+
+#[test]
+fn framework_import_and_assignment_order_controls_constructor_evidence() {
+    let f = Fixture::new();
+    let e = Engine::open(&f.0).unwrap();
+    for (prefix, has_source) in [
+        ("app = FastAPI()\nfrom fastapi import FastAPI\n", false),
+        ("from fastapi import FastAPI\nFastAPI = other\nfrom fastapi import FastAPI\napp = FastAPI()\n", true),
+        ("from fastapi import FastAPI\nfrom unrelated import FastAPI\napp = FastAPI()\n", false),
+        ("import fastapi as api\nimport unrelated as api\napp = api.FastAPI()\n", false),
+        ("from fastapi import FastAPI\napp = FastAPI()\nfrom unrelated import app\n", false),
+    ] {
+        f.write("routes.py", &format!("{prefix}@app.get('/search')\ndef route(q: str):\n    return db.execute(q)\n"));
+        let report = e.trace("routes.py", Some("sql-injection"), TraceLimits::default()).unwrap();
+        assert_eq!(!report.paths.is_empty(), has_source, "{prefix}");
+    }
+}
+
+#[test]
+fn registered_js_route_receivers_support_renamed_requests_and_safe_parameters() {
+    let f = Fixture::new();
+    let e = Engine::open(&f.0).unwrap();
+    for framework in ["express", "fastify"] {
+        for (handler, registration) in [
+            (
+                "",
+                "app.get('/search', async (incoming, reply) => db.execute(incoming.query.q));",
+            ),
+            (
+                "function route(incoming, reply) { return db.execute(incoming.query.q); }",
+                "app.get('/search', route);",
+            ),
+            (
+                "const route = (incoming, reply) => db.execute(incoming.query.q);",
+                "app.get('/search', route);",
+            ),
+        ] {
+            let source = format!("import factory from '{framework}';\nconst app = factory();\n{handler}\n{registration}\n");
+            f.write("routes.js", &source);
+            let report = e
+                .trace("routes.js", Some("sql-injection"), TraceLimits::default())
+                .unwrap();
+            assert!(!report.paths.is_empty(), "{source}");
+            assert!(report.complete, "{:?}", report.coverage_notes);
+            f.write(
+                "routes.js",
+                &source.replace(
+                    "db.execute(incoming.query.q)",
+                    "db.execute('SELECT * FROM users WHERE id=?', [incoming.query.q])",
+                ),
+            );
+            assert!(e
+                .trace("routes.js", Some("sql-injection"), TraceLimits::default())
+                .unwrap()
+                .paths
+                .is_empty());
+        }
+    }
+}
+
+#[test]
+fn js_route_constructor_proof_and_unsupported_middleware_are_explicit() {
+    let f = Fixture::new();
+    let e = Engine::open(&f.0).unwrap();
+    f.write(
+        "routes.js",
+        "const app = other();\napp.get('/search', (incoming) => db.execute(incoming.query.q));\n",
+    );
+    assert!(e
+        .trace("routes.js", Some("sql-injection"), TraceLimits::default())
+        .unwrap()
+        .paths
+        .is_empty());
+    f.write("routes.js", "import express from 'express';\nconst app = express();\napp.get('/search', auth, (incoming) => db.execute(incoming.query.q));\n");
+    let report = e
+        .trace("routes.js", Some("sql-injection"), TraceLimits::default())
+        .unwrap();
+    assert!(!report.complete);
+    assert!(!report.paths.is_empty());
+}
+
+#[test]
+fn commonjs_routers_aliases_and_fastify_plugins_trace_renamed_requests() {
+    let f = Fixture::new();
+    let e = Engine::open(&f.0).unwrap();
+    for source in [
+        "const express = require('express'); const app = express(); app.get('/q', incoming => db.execute(incoming.query.q));",
+        "const app = require('fastify')(); app.get('/q', incoming => db.execute(incoming.query.q));",
+        "const express = require('express'); const router = express.Router(); const handle = incoming => db.execute(incoming.query.q); const alias = handle; router.get('/q', alias);",
+        "const make = require('fastify'); const app = make(); app.register(async function plugin(server) { server.get('/q', incoming => db.execute(incoming.query.q)); });",
+        "import make from 'fastify'; const app = make(); function plugin(server) { const handle = incoming => db.execute(incoming.query.q); const alias = handle; server.get('/q', alias); } app.register(plugin);",
+        "const app = require('fastify')(); app.register(async function outer(server) { server.register(async function inner(child) { child.get('/q', incoming => db.execute(incoming.query.q)); }); });",
+    ] {
+        f.write("routes.js", source);
+        let report = e.trace("routes.js", Some("sql-injection"), TraceLimits::default()).unwrap();
+        assert!(report.complete, "{source}: {:?}", report.coverage_notes);
+        assert!(!report.paths.is_empty(), "{source}");
+        f.write("routes.js", &source.replace("db.execute(incoming.query.q)", "db.execute('SELECT * FROM users WHERE id=?', [incoming.query.q])"));
+        assert!(e.trace("routes.js", Some("sql-injection"), TraceLimits::default()).unwrap().paths.is_empty());
+    }
+}
+
+#[test]
+fn opaque_plugins_and_shadowed_require_do_not_imply_complete_framework_proof() {
+    let f = Fixture::new();
+    let e = Engine::open(&f.0).unwrap();
+    f.write("routes.js", "function require(name) { return other; } const make = require('express'); const app = make(); app.get('/q', incoming => db.execute(incoming.query.q));");
+    assert!(e
+        .trace("routes.js", Some("sql-injection"), TraceLimits::default())
+        .unwrap()
+        .paths
+        .is_empty());
+    f.write(
+        "routes.js",
+        "const make = require('fastify'); const app = make(); app.register(importedPlugin);",
+    );
+
+    assert!(
+        !e.trace("routes.js", None, TraceLimits::default())
+            .unwrap()
+            .complete
+    );
+    f.write("routes.js", "const app = require('fastify')(); function plugin(server) { server.register(plugin); } app.register(plugin);");
+    assert!(
+        !e.trace("routes.js", None, TraceLimits::default())
+            .unwrap()
+            .complete
+    );
+}
+
+#[test]
+fn plugin_scopes_preserve_outer_require_shadowing() {
+    let f = Fixture::new();
+    let e = Engine::open(&f.0).unwrap();
+    f.write("routes.js", "import make from 'fastify'; const app = make(); const require = other; app.register(function plugin(server) { const router = require('express')(); router.get('/q', incoming => db.execute(incoming.query.q)); });");
+    assert!(e
+        .trace("routes.js", Some("sql-injection"), TraceLimits::default())
+        .unwrap()
+        .paths
+        .is_empty());
+}
+
+#[test]
+fn fastify_hooks_and_plugin_options_keep_coverage_incomplete() {
+    let f = Fixture::new();
+    let e = Engine::open(&f.0).unwrap();
+    for source in [
+        "const app = require('fastify')(); app.addHook('preHandler', auth); app.get('/q', incoming => db.execute(incoming.query.q));",
+        "const app = require('fastify')(); app.register(function plugin(server) { server.get('/q', incoming => db.execute(incoming.query.q)); }, {prefix: '/api'});",
+    ] {
+        f.write("routes.js", source);
+        let report = e.trace("routes.js", Some("sql-injection"), TraceLimits::default()).unwrap();
+        assert!(!report.complete);
+        assert!(!report.paths.is_empty());
+    }
 }

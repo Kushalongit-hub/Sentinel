@@ -95,8 +95,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
             View::Overview => "a audit / p project",
             View::Findings => "/ search / e explain / s export",
             View::Rules => "arrows select rule",
-            View::Ai => "m provider / b preview / Enter ask",
-            View::Intelligence => "g index / w verify / u coverage",
+            View::Ai => "Alt+m provider / Alt+b preview / Enter send",
+            View::Intelligence => "g index / w verify / u coverage / h history / o jobs",
         }
     };
     frame.render_widget(
@@ -106,7 +106,13 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 Style::new().fg(if app.status_error { ORANGE } else { TEXT }),
             ),
             Line::styled(
-                format!(" Arrows navigate / Enter open / Tab focus / {actions} / ? help / Q quit"),
+                if app.view == View::Ai && !app.navigation_focus {
+                    format!(" Type message / {actions} / Alt+? help / Tab sections / Ctrl+C quit")
+                } else {
+                    format!(
+                        " Arrows navigate / Enter open / Tab focus / {actions} / ? help / Q quit"
+                    )
+                },
                 Style::new().fg(MUTED),
             ),
         ]),
@@ -115,7 +121,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     if app.help {
         let modal = centered(area, 82, 25);
         frame.render_widget(Clear, modal);
-        paragraph(frame,modal,"Keyboard guide","NAVIGATE\n  Tab / Shift+Tab           Switch focus\n  Arrows + Enter             Choose and open section\n  1-5                        Open section directly\n  j / k or arrows            Select finding / rule; scroll evidence\n  PgUp / PgDn / Home         Scroll detail / reset\n\nSECURITY\n  a Audit   d Git diff   g Index graph   w Verify patch   u Audit coverage\n  / Filter findings   p Project path   t Severity threshold\n  x External scanners   v Semgrep config   s JSON export   S SARIF export\n\nAI EXPLANATIONS\n  e Explain selected finding   c Explain codebase\n  m Local / NVIDIA NIM / both   i Question   l Local model   n NIM model\n  b Preview identical shared context   Enter Submit explanation\n\n  Esc Close / cancel operation    Ctrl+C / q Quit\n  Exports create new files. Cloud submission sends the previewed context.\n  ? or Esc closes. Arrows / PgUp / PgDn scroll.",app.help_scroll);
+        paragraph(frame,modal,"Keyboard guide","NAVIGATE\n  Tab / Shift+Tab           Switch focus\n  Arrows + Enter             Choose and open section\n  1-5                        Open section directly\n  j / k or arrows            Select finding / rule; scroll evidence\n  PgUp / PgDn / Home         Scroll detail / reset\n\nSECURITY\n  a Audit   d Git diff   g Index graph   w Verify patch   u Audit coverage   h Audit history   o Static jobs\n  / Filter findings   p Project path   t Severity threshold\n  x External scanners   v Semgrep config   s JSON export   S SARIF export\n\nCHAT\n  e Explain selected finding   c Explain codebase\n  Alt+m Provider   Alt+l Local model   Alt+n NIM model\n  Alt+p Project context on/off   Alt+r New chat\n  Alt+b Preview shared context   Enter Send message\n\n  Esc Close / cancel operation    Ctrl+C / q Quit\n  Exports create new files. Cloud submission sends the previewed context.\n  ? or Esc closes. Arrows / PgUp / PgDn scroll.",app.help_scroll);
     }
     if let Some(editor) = &app.editor {
         let modal = centered(area, 76, 7);
@@ -195,7 +201,7 @@ fn navigation(frame: &mut Frame, area: Rect, app: &App) {
         "Overview",
         "Security findings",
         "Rules",
-        "AI explain",
+        "Chat",
         "Investigation",
     ]
     .iter()
@@ -380,37 +386,61 @@ fn rules(frame: &mut Frame, area: Rect, app: &App) {
     }
 }
 fn ai(frame: &mut Frame, area: Rect, app: &App) {
-    let rows = Layout::vertical([Constraint::Length(8), Constraint::Min(1)])
-        .spacing(1)
-        .split(area);
+    let rows = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Min(1),
+        Constraint::Length(4),
+    ])
+    .spacing(1)
+    .split(area);
     paragraph(
         frame,
         rows[0],
-        "Shared context / m provider / b preview / Enter submit",
+        "CHAT / Alt+m provider / Alt+p project context",
         format!(
-            "Provider: {}   Target: {}\nLocal: {}   NVIDIA NIM: {}\n\nQuestion: {}",
+            "{} | Local: {} | NIM: {} | Context: {}",
             app.provider_name(),
-            if app.ai_finding.is_some() {
-                "Selected finding"
-            } else {
-                "Codebase"
-            },
             safe(&app.local_model),
-            if app.nim_model.is_empty() {
-                "Set with n or SENTINEL_NIM_MODEL".into()
+            safe(&app.nim_model),
+            if app.ai_finding.is_some() {
+                "finding"
+            } else if app.chat_context {
+                "project"
             } else {
-                safe(&app.nim_model)
-            },
-            safe(&app.question)
+                "off"
+            }
         ),
         0,
     );
     paragraph(
         frame,
         rows[1],
-        "Explanation / advisory",
-        app.ai_text.clone(),
-        app.scroll,
+        if app.chat_preview.is_some() {
+            "Payload preview / Esc return to conversation"
+        } else {
+            "Conversation / session only / Alt+r new chat"
+        },
+        app.chat_preview.as_ref().unwrap_or(&app.ai_text).clone(),
+        if app.chat_follow && app.chat_preview.is_none() {
+            Paragraph::new(app.ai_text.clone())
+                .wrap(Wrap { trim: false })
+                .line_count(rows[1].width.saturating_sub(2))
+                .saturating_sub(rows[1].height.saturating_sub(2) as usize)
+                .min(u16::MAX as usize) as u16
+        } else {
+            app.scroll
+        },
+    );
+    paragraph(
+        frame,
+        rows[2],
+        "Message / Enter send / Tab navigation",
+        if app.chat_input.is_empty() {
+            "Type a message…".into()
+        } else {
+            format!("> {}", safe(&app.chat_input))
+        },
+        0,
     );
 }
 #[cfg(test)]
@@ -452,6 +482,12 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(120, 38)).unwrap();
         terminal.draw(|f| draw(f, &app)).unwrap();
         if let Ok(path) = std::env::var("SENTINEL_TUI_SNAPSHOT") {
+            if std::env::var("SENTINEL_TUI_SNAPSHOT_VIEW").as_deref() == Ok("chat") {
+                app.view = View::Ai;
+                app.navigation_selected = 3;
+                app.navigation_focus = false;
+                terminal.draw(|f| draw(f, &app)).unwrap();
+            }
             let buffer = terminal.backend().buffer();
             let cells=buffer.content.iter().map(|c|serde_json::json!({"symbol":c.symbol(),"fg":format!("{:?}",c.fg),"bg":format!("{:?}",c.bg),"bold":c.modifier.contains(Modifier::BOLD)})).collect::<Vec<_>>();
             std::fs::write(
@@ -461,6 +497,26 @@ mod tests {
             )
             .unwrap();
         }
+    }
+    #[test]
+    fn chat_typing_is_not_a_shortcut_and_context_is_optional() {
+        let mut app = App::new(std::env::current_dir().unwrap()).unwrap();
+        app.view = View::Ai;
+        app.navigation_focus = false;
+        assert!(!app.chat_context);
+        for c in "amq?123".chars() {
+            assert!(!app.key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)));
+        }
+        assert_eq!(app.chat_input, "amq?123");
+        assert_eq!(app.provider_name(), "local");
+        assert!(!app.help);
+        app.paste("hello\x1b\n");
+        assert_eq!(app.chat_input, "amq?123hello");
+        app.key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::ALT));
+        assert!(app.chat_context);
+        app.key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::ALT));
+        assert!(app.chat_input.is_empty());
+        assert!(app.chat_history.is_empty());
     }
     #[test]
     fn navigation_requires_selection_and_returns_focus_on_escape() {
@@ -488,19 +544,19 @@ mod tests {
         let mut app = App::new(std::env::current_dir().unwrap()).unwrap();
         assert!(!app.key(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE)));
         assert_eq!(app.view, View::Ai);
-        app.key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+        app.key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::ALT));
         assert_eq!(app.provider_name(), "nim");
-        app.key(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE));
+        app.key(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::ALT));
         app.key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
         assert_eq!(app.help_scroll, 8);
         app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(!app.help);
-        app.key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
+        app.key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::ALT));
         app.editor.as_mut().unwrap().value.clear();
         app.paste("question\x1b\n");
         assert_eq!(app.editor.as_ref().unwrap().value, "question");
         app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert_eq!(app.question, "question");
-        assert!(app.key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE)));
+        assert!(app.key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::ALT)));
     }
 }

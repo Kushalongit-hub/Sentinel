@@ -129,7 +129,7 @@ sentinel explain FINDING_ID --db /path/to/.sentinel.db
 ```
 
 Finding explanation requires an existing database and finding. Its default
-provider is Ollama at localhost:11434 with model llama2; the model and endpoint
+provider is LM Studio/Bionic at localhost:1234/v1 with model qwen/qwen3.5-9b; the model and endpoint
 are configurable. Before calling AI, the shared project context is stored in the
 database's `memory` table. Codebase explanation can create a database without a
 prior scan. `--context-only` previews the payload without provider requests or
@@ -186,19 +186,19 @@ sentinel explain-codebase . --provider both --json
 | Option | Environment variable | Default |
 | --- | --- | --- |
 | `--provider` | — | `local`; accepts `local`, `nim`, `both` |
-| `--local-model` | `SENTINEL_LOCAL_MODEL` | `llama2` |
-| `--local-endpoint` | `SENTINEL_LOCAL_ENDPOINT` | `http://localhost:11434` |
-| `--nim-model` | `SENTINEL_NIM_MODEL` | Required for `nim` or `both` |
+| `--local-model` | `SENTINEL_LOCAL_MODEL` | `qwen/qwen3.5-9b` |
+| `--local-endpoint` | `SENTINEL_LOCAL_ENDPOINT` | `http://localhost:1234/v1` |
+| `--nim-model` | `SENTINEL_NIM_MODEL` | `z-ai/glm-5.3` |
 | `--nim-endpoint` | `SENTINEL_NIM_ENDPOINT` | `https://integrate.api.nvidia.com/v1` |
 | `--nim-key-env` | Names the key variable | `NVIDIA_API_KEY` |
-| `--ai-timeout` | — | `60` seconds per provider |
+| `--ai-timeout` | — | `180` seconds per provider |
 | `--context-bytes` | — | `12000`; range `1024`–`65536` |
 | `--context-only` | — | Preview only; no model or key required |
 | `--question` | — | Architecture overview or finding explanation |
 | `--json` | — | Structured responses and failures |
 
 CLI values take precedence over environment configuration. There is **no
-automatic fallback**: `local` calls only Ollama, `nim` calls only NVIDIA NIM,
+automatic fallback**: `local` calls only the configured local server, `nim` calls only NVIDIA NIM,
 and `both` calls both concurrently. Each answer is labeled with provider, model,
 and context ID. If one fails, the other answer remains available and the command
 returns exit `2`. No model arbitrates or silently merges the answers.
@@ -221,7 +221,7 @@ flowchart TB
     Preview["--context-only<br/>inspect exact payload"]
     Request["Common system and user messages"]
     Route{"User-selected provider"}
-    Local["Ollama /api/chat<br/>local or both"]
+    Local["LM Studio /v1 or Ollama /api/chat<br/>local or both"]
     Cloud["NVIDIA NIM /v1/chat/completions<br/>nim or both"]
     Results["Separate labeled answers<br/>shared context ID and per-provider errors"]
 
@@ -598,7 +598,7 @@ Existing subcommands and `sentinel --help` remain available.
 The fullscreen Ratatui interface uses a black marble background, restrained stone
 veins in unused sidebar space, white text, orange actions, and beige metadata.
 Persistent navigation opens five workspaces: Overview, Security findings,
-Rules, AI explain, and Investigation. Findings pair a selectable severity
+Rules, Chat, and Investigation. Findings pair a selectable severity
 list with location, confidence, execution path, evidence and remediation. The
 Investigation view shows persistent index statistics and patch verdicts. The
 overview distinguishes an unscanned project, incomplete coverage, findings needing
@@ -611,16 +611,30 @@ run in cancellable background processes, keeping navigation responsive.
 | Arrows + Enter / 1-5 | Choose and open a section / open directly |
 | a / d | Audit project / scan Git changes |
 | g / w | Index security graph / verify patch |
-| u | Inspect imported audit coverage, review verdicts and source freshness |
+| u / h / o | Latest audit coverage and freshness / 20 audit revisions / 20 persisted static jobs |
 | j / k / arrows | Select finding or rule / scroll text |
 | PageUp / PageDown / Home | Scroll evidence / reset |
 | / / p / t | Filter findings / project path / exit threshold |
 | x / v | Toggle external scanners / edit Semgrep config |
 | s / S | Export JSON / SARIF to a new file |
 | e / c | Explain selected finding / explain codebase |
-| m / i / l / n | Provider / question / local model / NIM model |
-| b / Enter in AI view | Preview shared context / request explanation |
+| Alt+m / Alt+l / Alt+n in Chat | Provider / local model / NIM model |
+| Alt+p / Alt+r in Chat | Toggle project evidence / start a new conversation |
+| Alt+b / Enter in Chat | Preview the provider payload / send a message |
 | ? / Esc / q or Q | Help / close, cancel, or return to navigation / quit |
+
+![Sentinel chat workspace](docs/sentinel-chat.png)
+
+Chat accepts ordinary text without interpreting letters as command shortcuts.
+It starts with project evidence off. `e` from Findings attaches that finding;
+`c` from Overview prepares a codebase question. `Alt+p` toggles new project
+evidence; existing conversation history is still sent, so use `Alt+r` to clear
+it. `Alt+?` opens help and `Ctrl+C` quits while typing.
+
+Conversation history lives only in memory, with up to 20 retained messages within
+12 KB of serialized history. Older turns are dropped and long answers may be
+shortened in the next request. Both providers receive the same retained history
+and evidence. The chat cannot execute commands or modify files.
 
 Local, NIM, and both are explicit choices with identical shared evidence in both
 mode and no automatic fallback. AI output remains advisory. Resize support includes
@@ -645,7 +659,7 @@ unaccounted candidates, and missing confirmation attestations. Imported audits
 remain separate from deterministic scan findings and patch gates. Press `u` in
 the TUI to inspect the latest retained report and source freshness.
 
-SQLite schema v6 retains content-addressed audit revisions and normalized coverage,
+SQLite schema v7 retains content-addressed audit revisions and normalized coverage,
 attempts, candidates and reviews in one import transaction. Legacy records remain
 readable. Patch comparisons now include typed source manifests and candidate
 evidence with detector identity; legacy baselines lacking provenance return WARN
@@ -697,7 +711,7 @@ flowchart LR
     Graph --> AST["sentinel-ast<br/>Tree-sitter definitions, imports, compact IR"]
     Graph --> Trace["sentinel-taint<br/>bounded parameter / return propagation"]
     Graph --> Rules["sentinel-scanner<br/>embedded rules and bounded Git reads"]
-    Graph --> DB[("sentinel-db<br/>SQLite schema v6")]
+    Graph --> DB[("sentinel-db<br/>SQLite schema v7")]
     CLI -. "optional explanations" .-> AI["sentinel-llm<br/>local / NVIDIA NIM / both"]
     classDef engine fill:#dbeafe,stroke:#2563eb,color:#172554;
     classDef optional fill:#fef3c7,stroke:#d97706,color:#78350f;
@@ -817,3 +831,36 @@ proof that code is safe.
 Create a persistent job with `sentinel job create /path/to/project`, then use its returned ID with `sentinel job resume ID --project /path/to/project --max-units 5`. Status and cancellation use `sentinel job status ID` and `sentinel job cancel ID` with the same project option. See [job scope and budget behavior](docs/static-jobs.md). These jobs do not execute target code or AI models.
 
 Use `sentinel scan-file relative/file.py --project /path/to/project` for the same rule-plus-graph scan used by MCP. Audit revision metadata is available through `sentinel audit-workflow history` and the repository-bound `sentinel_get_audit_history` MCP tool.
+
+Latest legacy audit records can be recovered with `sentinel audit-workflow export-legacy . --output <new-external-directory>`, then explicitly validated and imported. See [the recovery workflow](docs/audit-workflow.md#recover-the-latest-legacy-compatibility-record).
+
+Phase 2 adds lexical/import aliases, supported Flask/FastAPI string route inputs, Express/Fastify ESM and CommonJS routes, Express Router handler aliases, bounded local Fastify plugins, object-field and branch precision, ordinary async returns, and source-bound trace provenance. The seven development corpora contain 68 cases; all pass their mapped rule scope. See [supported contracts](docs/framework-source-contracts.md) and [backend evaluation with remaining gates](docs/phase2-backend-evaluation.md). Independent accuracy and isolated Joern evaluation remain pending.
+
+Local endpoints ending in `/v1` use OpenAI-compatible chat (LM Studio/Bionic).
+Other local endpoints use Ollama `/api/chat`; flags/environment override defaults.
+Local mode does not contact NVIDIA NIM.
+
+NIM defaults to `z-ai/glm-5.3` with low reasoning effort and an 8,192-token
+output budget. Set `NVIDIA_API_KEY` in your terminal to enable Cloud/Both.
+Credentials are never embedded in configuration, source or documentation.
+
+Sentinel loads launch-directory `.env`, then user-level `~/.sentinel/.env`,
+without overriding process variables. `.env_example` contains
+the supported AI settings; `.env` is git-ignored. Existing process variables
+win. Only the five documented AI variables are admitted; other keys are ignored.
+The API key is blank in newly generated templates until you fill it in.
+
+Global AI configuration can live in `~/.sentinel/.env` (Windows:
+`C:\Users\YOURNAME\.sentinel\.env`). Precedence is terminal environment, then
+launch-directory `.env`, then user configuration. Generic chat includes directory
+metadata but no source files; Alt+p attaches bounded project evidence.
+
+For Qwen3.5 in Bionic, the loaded model must use a chat template with
+`enable_thinking=false` for short interactive answers. On this installation the
+Qwen model.yaml custom field default was set false (original backed up), and
+Qwen was reloaded with 16K context and one prediction slot. Changing a chat's
+system prompt alone does not necessarily affect server inference configuration.
+
+Express/Fastify ESM module routes now recognize renamed request parameters and
+inline/direct named handlers. Middleware and unsupported registration forms
+remain explicitly incomplete. See [source contracts](docs/framework-source-contracts.md).

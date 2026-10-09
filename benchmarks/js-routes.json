@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "label_status": "Author-labelled development cases; bounded ESM module routes",
+  "cases": [
+    {
+      "id": "express-inline-positive",
+      "family": "express-inline",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "import create from 'express';\nconst app = create();\napp.get('/search', (incoming, reply) => db.execute(incoming.query.q));\n"
+      },
+      "rationale": "Author-labelled route registration regression; not runtime or independent evidence"
+    },
+    {
+      "id": "express-inline-safe",
+      "family": "express-inline",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "import create from 'express';\nconst app = create();\napp.get('/search', (incoming, reply) => db.execute('SELECT * FROM users WHERE id=?', [incoming.query.q]));\n"
+      },
+      "rationale": "Author-labelled route registration regression; not runtime or independent evidence"
+    },
+    {
+      "id": "fastify-named-positive",
+      "family": "fastify-named",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "import create from 'fastify';\nconst app = create();\nconst handle = async (incoming, reply) => db.execute(incoming.body.q);\napp.post('/search', handle);\n"
+      },
+      "rationale": "Author-labelled route registration regression; not runtime or independent evidence"
+    },
+    {
+      "id": "fastify-named-safe",
+      "family": "fastify-named",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "import create from 'fastify';\nconst app = create();\nconst handle = async (incoming, reply) => db.execute('SELECT * FROM users WHERE id=?', [incoming.body.q]);\napp.post('/search', handle);\n"
+      },
+      "rationale": "Author-labelled route registration regression; not runtime or independent evidence"
+    },
+    {
+      "id": "express-router-positive",
+      "family": "express-router",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "import { Router as create } from 'express';\nconst app = create();\napp.get('/search', (incoming, reply) => db.execute(incoming.params.id));\n"
+      },
+      "rationale": "Author-labelled route registration regression; not runtime or independent evidence"
+    },
+    {
+      "id": "express-router-safe",
+      "family": "express-router",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "import { Router as create } from 'express';\nconst app = create();\napp.get('/search', (incoming, reply) => db.execute('SELECT * FROM users WHERE id=?', [incoming.params.id]));\n"
+      },
+      "rationale": "Author-labelled route registration regression; not runtime or independent evidence"
+    },
+    {
+      "id": "fastify-helper-positive",
+      "family": "fastify-helper",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "import create from 'fastify';\nimport { run } from './helper.js';\nconst app = create();\nfunction handle(incoming, reply) { return run(incoming.query.q); }\napp.get('/search', handle);\n",
+        "helper.js": "export function run(value) { return db.execute(value); }\n"
+      },
+      "rationale": "Author-labelled route registration regression; not runtime or independent evidence"
+    },
+    {
+      "id": "fastify-helper-safe",
+      "family": "fastify-helper",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "import create from 'fastify';\nimport { run } from './helper.js';\nconst app = create();\nfunction handle(incoming, reply) { return run(incoming.query.q); }\napp.get('/search', handle);\n",
+        "helper.js": "export function run(value) { return db.execute('SELECT * FROM users WHERE id=?', [value]); }\n"
+      },
+      "rationale": "Author-labelled route registration regression; not runtime or independent evidence"
+    }
+  ]
+}

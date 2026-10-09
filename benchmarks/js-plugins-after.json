@@ -1,0 +1,328 @@
+{
+  "schema_version": 1,
+  "corpus_sha256": "9ce49671729e2a9beda20eb6d97c7c542fbb8d691436a877a69152d8595cf00d",
+  "binary_sha256": "ce94dc27714e26b5f501338c157c9fa1eea215c09c86f90cce01069cbad1ce5e",
+  "split": "development",
+  "scope": "case-level detection of mapped rules; additional findings are unscored",
+  "summary": {
+    "tp": 6,
+    "fp": 0,
+    "tn": 6,
+    "fn": 0,
+    "failed": 0,
+    "precision": {
+      "value": 1.0,
+      "wilson_95": [
+        0.6096657120978346,
+        1.0
+      ],
+      "denominator": 6
+    },
+    "recall": {
+      "value": 1.0,
+      "wilson_95": [
+        0.6096657120978346,
+        1.0
+      ],
+      "denominator": 6
+    },
+    "complete_cases": 12,
+    "total_cases": 12
+  },
+  "per_class": {
+    "sql-injection": {
+      "tp": 6,
+      "fp": 0,
+      "tn": 6,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6096657120978346,
+          1.0
+        ],
+        "denominator": 6
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6096657120978346,
+          1.0
+        ],
+        "denominator": 6
+      },
+      "complete_cases": 12,
+      "total_cases": 12
+    }
+  },
+  "per_engine": {
+    "graph": {
+      "tp": 6,
+      "fp": 0,
+      "tn": 6,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6096657120978346,
+          1.0
+        ],
+        "denominator": 6
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6096657120978346,
+          1.0
+        ],
+        "denominator": 6
+      },
+      "complete_cases": 12,
+      "total_cases": 12
+    }
+  },
+  "cases": [
+    {
+      "id": "require-express-positive",
+      "family": "require-express",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "f95706b823f2991eca09c35958cb064610029d09145edcad8a7e12343af95762",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 1,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 2079.419899999266
+    },
+    {
+      "id": "require-express-safe",
+      "family": "require-express",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "392c0f89836f71fe67d47d1c5b24171f6907616c6074cf8719422f3cde0ddcc9",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 39.549900000565685
+    },
+    {
+      "id": "require-fastify-positive",
+      "family": "require-fastify",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "3fe01fa49e95c51d3eb8d2e82705b8f33d4f334aec87f99981202df3b1452262",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 1,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 37.81860000162851
+    },
+    {
+      "id": "require-fastify-safe",
+      "family": "require-fastify",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "162d4d18e67d2857c08b6a63d3c1f8109a4585363643eb69bb3546c135d83e87",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 39.980800000193994
+    },
+    {
+      "id": "router-alias-positive",
+      "family": "router-alias",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "04d5f639b72a3c7cc6cfd8bfb7d7e3d10b92cd434666b85427260dcfa9186af2",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 1,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 38.57380000044941
+    },
+    {
+      "id": "router-alias-safe",
+      "family": "router-alias",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "60a497704a2b2c43cbbf7ec21622af15bd1226094437d8aab947b060859a53fa",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 40.058200000203215
+    },
+    {
+      "id": "inline-plugin-positive",
+      "family": "inline-plugin",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "bcab4e6b862f54fe3826d4d7cdb04714f15aeb059897f3846c4e5ae462eac3f5",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 1,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 36.21240000029502
+    },
+    {
+      "id": "inline-plugin-safe",
+      "family": "inline-plugin",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "257ff594fd3d6149b8e37e18b4cb61926abb46134b309c86c6743063583559a5",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 74.89589999931923
+    },
+    {
+      "id": "named-plugin-positive",
+      "family": "named-plugin",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "bf51f587cf9ecfbbea623870ace8dbe35dfbb7464a1b3772611e4a4af945d690",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 1,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 38.91699999985576
+    },
+    {
+      "id": "named-plugin-safe",
+      "family": "named-plugin",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "d5920cef503b77b24d223472df53182eb203e35ff8b654f48256df5c8795bb84",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 36.95770000012999
+    },
+    {
+      "id": "nested-plugin-positive",
+      "family": "nested-plugin",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "10353aa1b7ca3da80067ddcb3ac98acaa3a2a65a6031d22596b28ee03a28bfdb",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 1,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 38.477800000691786
+    },
+    {
+      "id": "nested-plugin-safe",
+      "family": "nested-plugin",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "e9526b07627f9f3aec4a0aa0ebdc5dcdb9531f8988dbbaae0194fa6796a55d31",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 38.37790000034147
+    }
+  ]
+}

@@ -44,11 +44,11 @@ workflow adds source snapshots, coverage records, schema validation and imported
 review attestations. An external agent still performs the audit.
 
 Current gaps include unbenchmarked accuracy, limited framework and language
-semantics, no native audit scheduler, no general secrets/SCA/IaC suites, and no
+semantics, no native AI audit scheduler (resumable static scan jobs exist), no general secrets/SCA/IaC suites, and no
 target execution sandbox. Imported reviewer identities and reproduction records
-are attestations, not authenticated proof. Schema v5 now retains normalized,
+are attestations, not authenticated proof. Schema v7 retains static job state, normalized JSON artifact descriptors and
 transactional audit import revisions while preserving legacy memory records.
-Artifact descriptors, resumable native jobs and scalable refresh remain outstanding.
+General reproduction artifact intake, native AI audit workers and scalable refresh remain outstanding.
 
 ## Phase 0 — Establish the scoreboard
 
@@ -97,6 +97,11 @@ Exit: migrations preserve existing history; crash/restart resumes safely; graph
 answers are correct on the query corpus; larger repositories do not silently exceed scope.
 
 ## Phase 2 — Close analysis gaps and evaluate a deeper backend
+
+Native semantics revision 11 and 68 development cases are implemented. See
+[backend evaluation](phase2-backend-evaluation.md) and
+[supported contracts](framework-source-contracts.md). This phase remains Started;
+independent held-out improvement and isolated backend evaluation are outstanding.
 
 - Improve import/alias resolution, typed call resolution where available, object
   properties, async flows, exceptions and framework entry points.

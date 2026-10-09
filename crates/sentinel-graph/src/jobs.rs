@@ -44,6 +44,26 @@ pub struct ScanJob {
     pub results: Vec<UnitResult>,
     pub notes: Vec<String>,
 }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JobSummary {
+    pub id: String,
+    pub state: JobState,
+    pub created_at: String,
+    pub source_snapshot: String,
+    pub units_recorded: usize,
+    pub total_files: usize,
+    pub attempts_reserved: usize,
+    pub max_attempts: usize,
+    pub elapsed_ms: u64,
+    pub max_elapsed_ms: u64,
+    pub active_file: Option<String>,
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JobList {
+    pub jobs: Vec<JobSummary>,
+    pub has_more: bool,
+    pub source_freshness_checked: bool,
+}
 fn encode(job: &ScanJob) -> Result<String> {
     let payload = serde_json::to_string(job)?;
     if payload.len() > 2 * 1024 * 1024 {
@@ -59,6 +79,47 @@ fn detector_id() -> String {
     ))
 }
 impl Engine {
+    /// Read-only, repository-bound metadata. Listing never indexes, resumes or
+    /// infers freshness; a recorded Completed state is not a clean security verdict.
+    pub fn list_scan_jobs(&self, limit: usize) -> Result<JobList> {
+        if !(1..=100).contains(&limit) {
+            bail!("job list limit must be 1..100");
+        }
+        let tx = self.db.connection().unchecked_transaction()?;
+        let rows = {
+            let mut stmt = tx.prepare("SELECT job_id,created_at FROM security_jobs WHERE project_id=?1 ORDER BY rowid DESC LIMIT ?2")?;
+            let rows = stmt
+                .query_map(params![self.project_id, (limit + 1) as i64], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            rows
+        };
+        let has_more = rows.len() > limit;
+        let mut jobs = Vec::new();
+        for (id, created_at) in rows.into_iter().take(limit) {
+            let (job, _) = self.load_job(&id)?;
+            jobs.push(JobSummary {
+                id: job.id,
+                state: job.state,
+                created_at,
+                source_snapshot: job.source_snapshot,
+                units_recorded: job.results.len(),
+                total_files: job.source_manifest.len(),
+                attempts_reserved: job.attempts_reserved,
+                max_attempts: job.max_attempts,
+                elapsed_ms: job.elapsed_ms,
+                max_elapsed_ms: job.max_elapsed_ms,
+                active_file: job.active_file,
+            });
+        }
+        tx.commit()?;
+        Ok(JobList {
+            jobs,
+            has_more,
+            source_freshness_checked: false,
+        })
+    }
     fn job_manifest(&self) -> Result<BTreeMap<String, String>> {
         // ponytail: full reconciliation per admission; replace with validated incremental snapshots after large-corpus measurement.
         let stats = self.index()?;

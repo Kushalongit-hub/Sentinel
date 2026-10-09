@@ -1,7 +1,7 @@
 //! Portable, deterministic contracts for repository security intelligence.
 use serde::{Deserialize, Serialize};
 /// Increment when source extraction, resolution or flow interpretation semantics change.
-pub const ANALYSIS_SEMANTICS_REVISION: u32 = 2;
+pub const ANALYSIS_SEMANTICS_REVISION: u32 = 11;
 
 /// A project-relative source location; line numbers are one-based and inclusive.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -166,11 +166,22 @@ pub struct TaintPath {
 /// Bounded trace output; `complete` concerns traversal, not compiler-level soundness.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceReport {
+    #[serde(default)]
+    pub backend: Option<AnalysisBackendIdentity>,
+    #[serde(default)]
+    pub source_snapshot: Option<String>,
     pub paths: Vec<TaintPath>,
     pub nodes_visited: usize,
     pub duration_ms: u128,
     pub complete: bool,
     pub coverage_notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnalysisBackendIdentity {
+    pub name: String,
+    pub version: String,
+    pub semantics_revision: u32,
 }
 
 /// Stable SHA-256 identity for serialized deterministic keys.

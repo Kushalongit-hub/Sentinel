@@ -25,6 +25,8 @@ fn source_name(value: &str) -> bool {
         "req.body",
         "req.query",
         "req.params",
+        "req.headers",
+        "req.cookies",
         "request.args",
         "request.form",
         "request.json",
@@ -33,6 +35,8 @@ fn source_name(value: &str) -> bool {
         "request.query",
         "request.body",
         "request.query_params",
+        "request.headers",
+        "request.cookies",
         "location.hash",
         "location.search",
         "window.location.hash",
@@ -191,11 +195,36 @@ fn statements(node: Node<'_>, source: &str) -> Vec<FlowStmt> {
                     });
                 }
                 result.push(FlowStmt::Assign {
-                    name,
+                    name: name.clone(),
                     value,
                     local: matches!(node.kind(), "variable_declarator" | "let_declaration"),
                     line,
                 });
+                if right.kind() == "object"
+                    && left.kind() == "identifier"
+                    && named(right).iter().all(|pair| {
+                        pair.kind() == "pair"
+                            && pair.child_by_field_name("key").is_some_and(|key| {
+                                matches!(key.kind(), "property_identifier" | "identifier")
+                            })
+                    })
+                {
+                    for pair in named(right).into_iter().filter(|n| n.kind() == "pair") {
+                        if let (Some(key), Some(value)) = (
+                            pair.child_by_field_name("key"),
+                            pair.child_by_field_name("value"),
+                        ) {
+                            if matches!(key.kind(), "property_identifier" | "identifier") {
+                                result.push(FlowStmt::Assign {
+                                    name: format!("{name}.{}", text(key, source)),
+                                    value: expression(value, source),
+                                    local: matches!(node.kind(), "variable_declarator"),
+                                    line,
+                                });
+                            }
+                        }
+                    }
+                }
                 result
             } else {
                 vec![]
@@ -315,20 +344,58 @@ fn imports(node: Node<'_>, source: &str) -> Vec<ImportRecord> {
     } else if let Some(rest) = raw.strip_prefix("import ") {
         if let Some(module) = node.child_by_field_name("source") {
             let module = text(module, source).trim_matches(['\'', '"']).to_string();
-            let clause = rest.split(" from ").next().unwrap_or("");
-            let names = clause.trim().trim_matches(['{', '}']);
-            for item in names.split(',') {
-                let parts = item.split_whitespace().collect::<Vec<_>>();
-                if parts.is_empty() {
-                    continue;
+            fn bindings(
+                node: Node<'_>,
+                source: &str,
+                module: &str,
+                line: usize,
+                result: &mut Vec<ImportRecord>,
+            ) {
+                match node.kind() {
+                    "import_specifier" => {
+                        if let Some(name) = node.child_by_field_name("name") {
+                            let local = node.child_by_field_name("alias").unwrap_or(name);
+                            result.push(ImportRecord {
+                                module: module.into(),
+                                imported: text(name, source).into(),
+                                local: text(local, source).into(),
+                                line,
+                            });
+                        }
+                    }
+                    "namespace_import" => {
+                        if let Some(local) =
+                            named(node).into_iter().find(|n| n.kind() == "identifier")
+                        {
+                            result.push(ImportRecord {
+                                module: module.into(),
+                                imported: "*".into(),
+                                local: text(local, source).into(),
+                                line,
+                            });
+                        }
+                    }
+                    "identifier" if node.parent().is_some_and(|p| p.kind() == "import_clause") => {
+                        // Default exports need export identity modelling; do not guess a same-named function.
+                        result.push(ImportRecord {
+                            module: module.into(),
+                            imported: "default".into(),
+                            local: text(node, source).into(),
+                            line,
+                        });
+                    }
+                    _ => {
+                        for child in named(node) {
+                            bindings(child, source, module, line, result);
+                        }
+                    }
                 }
-                let imported = if parts[0] == "*" { "*" } else { parts[0] };
-                result.push(ImportRecord {
-                    module: module.clone(),
-                    imported: imported.into(),
-                    local: parts.last().unwrap().trim_matches(['{', '}']).into(),
-                    line,
-                });
+            }
+            for child in named(node)
+                .into_iter()
+                .filter(|n| n.kind() == "import_clause")
+            {
+                bindings(child, source, &module, line, &mut result);
             }
         } else {
             for item in rest.split(',') {
@@ -457,6 +524,427 @@ fn annotate(
         snippet: snippet.chars().take(240).collect(),
     });
 }
+// ponytail: direct lexical registrations, bounded plugin recursion; no middleware lifecycle proof.
+fn js_route_inputs(node: Node<'_>, source: &str) -> (Vec<(String, usize)>, bool) {
+    fn require_factory(call: Node<'_>, source: &str, enabled: bool) -> Option<String> {
+        if !enabled
+            || call.kind() != "call_expression"
+            || call
+                .child_by_field_name("function")
+                .is_none_or(|f| text(f, source) != "require")
+        {
+            return None;
+        }
+        let args = call
+            .child_by_field_name("arguments")
+            .map(named)
+            .unwrap_or_default();
+        if args.len() != 1 || args[0].kind() != "string" {
+            return None;
+        }
+        let module = text(args[0], source).trim_matches(['\'', '"']);
+        matches!(module, "express" | "fastify").then(|| module.to_string())
+    }
+    fn factory(
+        call: Node<'_>,
+        source: &str,
+        factories: &BTreeMap<String, String>,
+        require_enabled: bool,
+    ) -> Option<String> {
+        if call.kind() != "call_expression" {
+            return None;
+        }
+        let function = call.child_by_field_name("function")?;
+        if let Some(value) = factories.get(text(function, source)) {
+            return Some(value.clone());
+        }
+        if let Some(receiver) = text(function, source).strip_suffix(".Router") {
+            if factories
+                .get(receiver)
+                .is_some_and(|value| value == "express")
+            {
+                return Some("express".into());
+            }
+        }
+        require_factory(function, source, require_enabled)
+    }
+    fn inspect<'tree>(
+        scope: Node<'tree>,
+        context: (&str, usize),
+        mut factories: BTreeMap<String, String>,
+        mut receivers: BTreeMap<String, String>,
+        mut handlers: BTreeMap<String, Node<'tree>>,
+        ancestry: (usize, bool),
+        remaining: &mut usize,
+    ) -> (bool, bool) {
+        let (source, target) = context;
+        let (depth, inherited_require) = ancestry;
+        if depth > 8 || *remaining == 0 {
+            return (false, true);
+        }
+        *remaining -= 1;
+        let statements = named(scope);
+        let mut require_enabled = inherited_require
+            && !handlers.contains_key("require")
+            && scope.parent().is_none_or(|parent| {
+                !parameters(parent, source)
+                    .iter()
+                    .any(|name| name == "require")
+            });
+        for statement in &statements {
+            if statement.kind() == "function_declaration" {
+                if let Some(name) = statement.child_by_field_name("name") {
+                    require_enabled &= text(name, source) != "require";
+                    handlers.insert(text(name, source).to_string(), *statement);
+                }
+            }
+            for declaration in named(*statement)
+                .into_iter()
+                .filter(|n| n.kind() == "variable_declarator")
+            {
+                require_enabled &= declaration
+                    .child_by_field_name("name")
+                    .is_none_or(|n| text(n, source) != "require");
+            }
+        }
+        let mut registered = false;
+        let mut partial = false;
+        for statement in statements {
+            if statement.kind() == "import_statement" {
+                for import in imports(statement, source) {
+                    factories.remove(&import.local);
+                    receivers.remove(&import.local);
+                    handlers.remove(&import.local);
+                    require_enabled &= import.local != "require";
+                    if matches!(import.module.as_str(), "express" | "fastify")
+                        && (import.imported == "default"
+                            || (import.module == "express" && import.imported == "Router"))
+                    {
+                        factories.insert(import.local, import.module);
+                    }
+                }
+            }
+            for assignment in named(statement)
+                .into_iter()
+                .filter(|n| matches!(n.kind(), "variable_declarator" | "assignment_expression"))
+            {
+                let left = assignment
+                    .child_by_field_name("name")
+                    .or_else(|| assignment.child_by_field_name("left"));
+                let right = assignment
+                    .child_by_field_name("value")
+                    .or_else(|| assignment.child_by_field_name("right"));
+                if let (Some(left), Some(right)) = (left, right) {
+                    let name = text(left, source).to_string();
+                    let framework = factory(right, source, &factories, require_enabled);
+                    let imported = require_factory(right, source, require_enabled);
+                    let alias = handlers
+                        .get(text(right, source))
+                        .copied()
+                        .filter(|_| right.kind() == "identifier");
+                    factories.remove(&name);
+                    receivers.remove(&name);
+                    handlers.remove(&name);
+                    require_enabled &= name != "require";
+                    if let Some(framework) = framework {
+                        receivers.insert(name.clone(), framework);
+                    }
+                    if let Some(imported) = imported {
+                        factories.insert(name.clone(), imported);
+                    }
+                    if let Some(alias) = alias {
+                        handlers.insert(name.clone(), alias);
+                    }
+                    if matches!(right.kind(), "arrow_function" | "function_expression") {
+                        handlers.insert(name, right);
+                    }
+                }
+            }
+            for call in named(statement)
+                .into_iter()
+                .filter(|n| n.kind() == "call_expression")
+            {
+                let Some(function) = call.child_by_field_name("function") else {
+                    continue;
+                };
+                let Some((receiver, method)) = text(function, source).rsplit_once('.') else {
+                    continue;
+                };
+                let Some(framework) = receivers.get(receiver) else {
+                    continue;
+                };
+                let args = call
+                    .child_by_field_name("arguments")
+                    .map(named)
+                    .unwrap_or_default();
+                let resolve = |handler: Node<'tree>| {
+                    if handler.kind() == "identifier" {
+                        handlers.get(text(handler, source)).copied()
+                    } else if matches!(handler.kind(), "arrow_function" | "function_expression") {
+                        Some(handler)
+                    } else {
+                        None
+                    }
+                };
+                if method == "register" && framework == "fastify" {
+                    if let Some(plugin) = args.first().copied().and_then(resolve) {
+                        if let (Some(parameter), Some(body)) = (
+                            parameters(plugin, source).first(),
+                            plugin.child_by_field_name("body"),
+                        ) {
+                            let mut local = receivers.clone();
+                            let mut plugin_factories = factories.clone();
+                            let mut plugin_handlers = handlers.clone();
+                            for parameter in parameters(plugin, source) {
+                                local.remove(&parameter);
+                                plugin_factories.remove(&parameter);
+                                plugin_handlers.remove(&parameter);
+                            }
+                            local.insert(parameter.clone(), "fastify".into());
+                            let result = inspect(
+                                body,
+                                (source, target),
+                                plugin_factories,
+                                local,
+                                plugin_handlers,
+                                (depth + 1, require_enabled),
+                                remaining,
+                            );
+                            registered |= result.0;
+                            partial |= result.1;
+                        } else {
+                            partial = true;
+                        }
+                    } else {
+                        partial = true;
+                    }
+                    // Options/prefixes are not interpreted as authorization or sanitization.
+                    partial |= args.len() > 1;
+                    continue;
+                }
+                if ![
+                    "get", "post", "put", "patch", "delete", "head", "options", "all",
+                ]
+                .contains(&method)
+                {
+                    if ["use", "route", "register", "addHook"].contains(&method) {
+                        partial = true;
+                    }
+                    continue;
+                }
+                if args.len() < 2 || args[0].kind() != "string" {
+                    partial = true;
+                    continue;
+                }
+                partial |= args.len() != 2;
+                for handler in &args[1..] {
+                    if let Some(handler) = resolve(*handler) {
+                        registered |= handler.id() == target;
+                    } else {
+                        partial = true;
+                    }
+                }
+            }
+        }
+        (registered, partial)
+    }
+    let mut module = node;
+    while let Some(parent) = module.parent() {
+        module = parent;
+    }
+    if module.kind() != "program" {
+        return (vec![], false);
+    }
+    let (registered, partial) = inspect(
+        module,
+        (source, node.id()),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        (0, true),
+        &mut 256,
+    );
+    let inputs = if registered {
+        parameters(node, source)
+            .first()
+            .map(|parameter| {
+                ["query", "body", "params", "headers", "cookies"]
+                    .iter()
+                    .map(|field| {
+                        (
+                            format!("{parameter}.{field}"),
+                            node.start_position().row + 1,
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+    (inputs, partial)
+}
+
+fn framework_string_inputs(node: Node<'_>, source: &str) -> (Vec<(String, usize)>, bool) {
+    let Some(decorated) = node.parent().filter(|p| p.kind() == "decorated_definition") else {
+        return (vec![], false);
+    };
+    let Some(module) = decorated.parent().filter(|p| p.kind() == "module") else {
+        return (vec![], false);
+    };
+    let mut constructors = BTreeMap::new();
+    let mut receiver_bindings = BTreeMap::new();
+    for statement in named(module)
+        .into_iter()
+        .take_while(|n| n.start_byte() < decorated.start_byte())
+    {
+        if matches!(
+            statement.kind(),
+            "import_statement" | "import_from_statement"
+        ) {
+            for import in imports(statement, source) {
+                constructors.retain(|name: &String, _| {
+                    name != &import.local && !name.starts_with(&format!("{}.", import.local))
+                });
+                receiver_bindings.remove(import.local.as_str());
+                let names: &[&str] = match import.module.as_str() {
+                    "fastapi" => &["FastAPI", "APIRouter"],
+                    "flask" => &["Flask"],
+                    _ => &[],
+                };
+                for name in names {
+                    if import.imported == *name {
+                        constructors.insert(import.local.clone(), import.module.clone());
+                    } else if import.imported == "*" {
+                        constructors
+                            .insert(format!("{}.{name}", import.local), import.module.clone());
+                    }
+                }
+            }
+            continue;
+        }
+        if statement.kind() != "expression_statement" {
+            continue;
+        }
+        for assignment in named(statement)
+            .into_iter()
+            .filter(|n| n.kind() == "assignment")
+        {
+            if let (Some(left), Some(right)) = (
+                assignment.child_by_field_name("left"),
+                assignment.child_by_field_name("right"),
+            ) {
+                let framework = if right.kind() == "call" {
+                    right
+                        .child_by_field_name("function")
+                        .and_then(|f| constructors.get(text(f, source)).cloned())
+                } else {
+                    None
+                };
+                let assigned = text(left, source);
+                constructors.retain(|name, _| {
+                    name != assigned && !name.starts_with(&format!("{assigned}."))
+                });
+                receiver_bindings.insert(assigned, framework);
+            }
+        }
+    }
+    let mut fastapi_route = false;
+    let mut partial_flask_route = false;
+    let mut flask_names = std::collections::BTreeSet::new();
+    for decorator in named(decorated)
+        .into_iter()
+        .filter(|n| n.kind() == "decorator")
+    {
+        let value = text(decorator, source).trim_start_matches('@');
+        let name = value.split('(').next().unwrap_or("");
+        if let Some((receiver, method)) = name.rsplit_once('.') {
+            match receiver_bindings
+                .get(receiver)
+                .and_then(|binding| binding.as_deref())
+            {
+                Some("fastapi")
+                    if ["get", "post", "put", "patch", "delete", "options", "head"]
+                        .contains(&method) =>
+                {
+                    fastapi_route = true
+                }
+                Some("flask")
+                    if ["route", "get", "post", "put", "patch", "delete"].contains(&method) =>
+                {
+                    let mut literal_path = false;
+                    if let Some(arguments) = named(decorator)
+                        .into_iter()
+                        .find(|n| n.kind() == "call")
+                        .and_then(|call| call.child_by_field_name("arguments"))
+                    {
+                        let args = named(arguments);
+                        let path = args
+                            .first()
+                            .copied()
+                            .filter(|n| n.kind() != "keyword_argument")
+                            .or_else(|| {
+                                args.iter()
+                                    .find(|arg| {
+                                        arg.kind() == "keyword_argument"
+                                            && arg
+                                                .child_by_field_name("name")
+                                                .is_some_and(|name| text(name, source) == "rule")
+                                    })
+                                    .and_then(|arg| arg.child_by_field_name("value"))
+                            });
+                        if let Some(path) = path.filter(|n| {
+                            n.kind() == "string"
+                                && !named(*n).iter().any(|part| part.kind() == "interpolation")
+                        }) {
+                            literal_path = true;
+                            for segment in text(path, source).split('<').skip(1) {
+                                if let Some((parameter, _)) = segment.split_once('>') {
+                                    let (converter, name) =
+                                        parameter.split_once(':').unwrap_or(("string", parameter));
+                                    if ["string", "path"].contains(&converter) {
+                                        flask_names.insert(name.to_string());
+                                    } else {
+                                        partial_flask_route = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    partial_flask_route |= !literal_path;
+                }
+                _ => {}
+            }
+        }
+    }
+    let inputs: Vec<_> = node
+        .child_by_field_name("parameters")
+        .map(named)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|p| {
+            let name = if p.kind() == "identifier" {
+                p
+            } else {
+                named(p).into_iter().find(|n| n.kind() == "identifier")?
+            };
+            let flask_input = flask_names.contains(text(name, source));
+            let fastapi_input = fastapi_route
+                && p.child_by_field_name("type")
+                    .is_some_and(|t| text(t, source).trim() == "str")
+                && !p
+                    .child_by_field_name("value")
+                    .is_some_and(|v| v.kind() == "call");
+            if !flask_input && !fastapi_input {
+                return None;
+            }
+            Some((text(name, source).into(), name.start_position().row + 1))
+        })
+        .collect();
+    let partial =
+        partial_flask_route || (fastapi_route && parameters(node, source).len() != inputs.len());
+    (inputs, partial)
+}
 fn method_owner(node: Node<'_>) -> bool {
     let mut parent = node.parent();
     while let Some(node) = parent {
@@ -556,6 +1044,34 @@ fn visit(
                     });
                 }
             }
+        }
+        let (mut framework_inputs, partial_framework) = framework_string_inputs(node, source);
+        let (js_inputs, partial_js) = js_route_inputs(node, source);
+        framework_inputs.extend(js_inputs);
+        if partial_js {
+            let note = format!("{path}: Express/Fastify registration, middleware or handler forms outside bounded lexical routes/plugins are not modeled");
+            if !out.notes.contains(&note) {
+                out.notes.push(note);
+            }
+        }
+        if partial_framework {
+            out.notes.push(format!("{path}:{}: Framework route/parameter forms outside supported string inputs are not modeled", node.start_position().row+1));
+        }
+        if !framework_inputs.is_empty() {
+            let mut inputs = framework_inputs
+                .into_iter()
+                .map(|(name, line)| FlowStmt::Assign {
+                    value: FlowExpr::Source {
+                        name: format!("HTTP route string parameter {name}"),
+                        line,
+                    },
+                    name,
+                    local: true,
+                    line,
+                })
+                .collect::<Vec<_>>();
+            inputs.extend(body);
+            body = inputs;
         }
         let symbol = SymbolRecord {
             id: id.clone(),
@@ -674,6 +1190,9 @@ pub fn extract_security_file(
         annotations: vec![],
         notes: unsupported.into_iter().collect(),
     };
+    if js_route_inputs(tree.root_node(), source).1 {
+        out.notes.push(format!("{path}: Express/Fastify registration, middleware or handler forms outside bounded lexical routes/plugins are not modeled"));
+    }
     visit(
         tree.root_node(),
         source,

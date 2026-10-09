@@ -75,6 +75,45 @@ pub struct AuditRevision {
     pub imported_at: String,
     pub is_latest: bool,
 }
+/// Descriptor for normalized JSON retained in an immutable imported revision.
+/// Hash/size refer to canonical serialization, not the original on-disk bytes.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuditArtifact {
+    pub schema_version: u32,
+    pub revision_id: String,
+    pub name: String,
+    pub media_type: String,
+    pub encoding: String,
+    pub content_hash: String,
+    pub size_bytes: usize,
+    pub source_snapshot: String,
+    pub provenance: String,
+    pub execution_observed: bool,
+}
+fn artifact_descriptors(run: &AuditRun, revision: &str) -> Result<Vec<AuditArtifact>> {
+    [
+        ("run-metadata.json", serde_json::to_value(&run.metadata)?),
+        ("coverage-ledger.json", run.coverage.clone()),
+        ("findings.json", run.findings.clone()),
+        ("verification.json", run.verification.clone()),
+    ]
+    .into_iter()
+    .map(|(name, value)| {
+        Ok(AuditArtifact {
+            schema_version: 1,
+            revision_id: revision.into(),
+            name: name.into(),
+            media_type: "application/json".into(),
+            encoding: "sentinel-serde-json-v1".into(),
+            content_hash: identity(&value),
+            size_bytes: serde_json::to_vec(&value)?.len(),
+            source_snapshot: run.metadata.source_snapshot.clone(),
+            provenance: "validated-import-attestation".into(),
+            execution_observed: false,
+        })
+    })
+    .collect()
+}
 fn asset(name: &str) -> &'static str {
     ASSETS
         .iter()
@@ -272,6 +311,45 @@ impl Engine {
         }
         write_new(&output.join("architecture.md"), b"# Reconnaissance pending\n\nUse index-evidence.json and Sentinel MCP to map entry points, trust boundaries, assets, and omitted surfaces. Planned ledger units do not imply coverage.\n")?;
         Ok(metadata)
+    }
+    /// Recover legacy compatibility records without promoting them into audit tables.
+    /// Export is not validation; the normal validate/import path remains mandatory.
+    pub fn export_legacy_audit_run(&self, output: &Path) -> Result<PathBuf> {
+        let value = self
+            .db
+            .get_memory(KEY)?
+            .context("no legacy audit record available")?;
+        if value.len() > LIMIT {
+            bail!("legacy audit record exceeds 2 MiB");
+        }
+        let run: AuditRun = serde_json::from_str(&value)?;
+        if run.metadata.target != self.root || run.metadata.repo != self.project_id {
+            bail!("legacy audit belongs to another repository");
+        }
+        let parent = output
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        if parent.canonicalize()?.starts_with(&self.root) {
+            bail!("legacy export must be outside the target repository");
+        }
+        let records = [
+            ("run-metadata.json", serde_json::to_value(&run.metadata)?),
+            ("coverage-ledger.json", run.coverage),
+            ("findings.json", run.findings),
+            ("verification.json", run.verification),
+        ]
+        .into_iter()
+        .map(|(name, value)| Ok((name, serde_json::to_vec_pretty(&value)?)))
+        .collect::<Result<Vec<_>>>()?;
+        if records.iter().any(|(_, bytes)| bytes.len() > LIMIT) {
+            bail!("legacy export record exceeds 2 MiB");
+        }
+        let directory = new_directory(output)?;
+        for (name, bytes) in records {
+            write_new(&directory.join(name), &bytes)?;
+        }
+        Ok(directory)
     }
     pub fn validate_audit_run(&self, directory: &Path) -> Result<AuditRun> {
         let directory = directory.canonicalize()?;
@@ -534,6 +612,9 @@ impl Engine {
                     params![self.project_id,revision,review["fingerprint"].as_str(),serde_json::to_string(review)?])?;
             }
         }
+        for artifact in artifact_descriptors(&run, &revision)? {
+            tx.execute("INSERT OR IGNORE INTO audit_artifacts(project_id,revision_id,name,payload) VALUES (?1,?2,?3,?4)", params![self.project_id,revision,artifact.name,serde_json::to_string(&artifact)?])?;
+        }
         tx.execute("INSERT INTO audit_latest(project_id,revision_id) VALUES (?1,?2) ON CONFLICT(project_id) DO UPDATE SET revision_id=excluded.revision_id",
             params![self.project_id,revision])?;
         // Preserve old readers, but update both compatibility keys in the same transaction.
@@ -545,6 +626,43 @@ impl Engine {
         }
         tx.commit()?;
         self.audit_status()
+    }
+    /// Metadata only, scoped to a retained revision in this repository.
+    /// Legacy revisions are described from their retained payload without inventing
+    /// original file bytes or observed execution. No artifact paths are opened.
+    pub fn audit_artifacts(&self, revision: &str) -> Result<Vec<AuditArtifact>> {
+        if revision.len() != 64 || !revision.bytes().all(|b| b.is_ascii_hexdigit()) {
+            bail!("revision must be a 64-character hexadecimal identity");
+        }
+        let payload: String = self
+            .db
+            .connection()
+            .query_row(
+                "SELECT payload FROM audit_revisions WHERE project_id=?1 AND revision_id=?2",
+                params![self.project_id, revision],
+                |r| r.get(0),
+            )
+            .optional()?
+            .context("audit revision not found in this repository")?;
+        let mut stmt = self.db.connection().prepare("SELECT payload FROM audit_artifacts WHERE project_id=?1 AND revision_id=?2 ORDER BY name LIMIT 4")?;
+        let stored = stmt
+            .query_map(params![self.project_id, revision], |r| {
+                r.get::<_, String>(0)
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        if stored.is_empty() {
+            return artifact_descriptors(&serde_json::from_str(&payload)?, revision);
+        }
+        let actual: Vec<AuditArtifact> = stored
+            .into_iter()
+            .map(|s| serde_json::from_str(&s))
+            .collect::<std::result::Result<_, _>>()?;
+        let mut expected = artifact_descriptors(&serde_json::from_str(&payload)?, revision)?;
+        expected.sort_by(|a, b| a.name.cmp(&b.name));
+        if actual != expected {
+            bail!("artifact descriptors disagree with retained audit revision");
+        }
+        Ok(actual)
     }
     /// Bounded revision metadata only; historical source freshness is not inferred.
     pub fn audit_history(&self, limit: usize) -> Result<AuditHistory> {

@@ -66,13 +66,16 @@ impl SentinelDb {
         let version: i64 = self
             .conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version > 6 {
+        if version > 7 {
             return Err(DbError::Migration(format!(
-                "database version {version} is newer than supported version 6"
+                "database version {version} is newer than supported version 7"
             )));
         }
-        if version == 6 {
+        if version == 7 {
             return Ok(());
+        }
+        if version == 6 {
+            return self.migrate_artifacts();
         }
         if version == 5 {
             return self.migrate_jobs();
@@ -210,6 +213,17 @@ PRAGMA user_version=5;")?;
     fn migrate_jobs(&self) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
         tx.execute_batch("CREATE TABLE IF NOT EXISTS security_jobs(project_id TEXT NOT NULL,job_id TEXT NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(project_id,job_id)); PRAGMA user_version=6;")?;
+        tx.commit()?;
+        self.migrate_artifacts()
+    }
+    fn migrate_artifacts(&self) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute_batch(
+            "CREATE TABLE IF NOT EXISTS audit_artifacts (
+ project_id TEXT NOT NULL, revision_id TEXT NOT NULL, name TEXT NOT NULL,
+ payload TEXT NOT NULL, PRIMARY KEY(project_id,revision_id,name));
+PRAGMA user_version=7;",
+        )?;
         tx.commit()?;
         Ok(())
     }
@@ -463,8 +477,8 @@ mod tests {
             .conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 6);
-        db.conn.execute_batch("PRAGMA user_version=7;").unwrap();
+        assert_eq!(version, 7);
+        db.conn.execute_batch("PRAGMA user_version=8;").unwrap();
         assert!(db.migrate().is_err());
     }
 }

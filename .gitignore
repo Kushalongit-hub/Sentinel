@@ -10,3 +10,8 @@
 .vscode/
 .DS_Store
 __pycache__/
+
+# Local credentials
+.env
+.env.*
+!.env_example

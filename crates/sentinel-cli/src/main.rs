@@ -1,5 +1,6 @@
 mod audit;
 mod diff;
+mod env_config;
 mod explain;
 mod rules;
 mod scan;
@@ -62,7 +63,7 @@ pub struct AiArgs {
     pub nim_endpoint: Option<String>,
     #[arg(long, default_value = "NVIDIA_API_KEY")]
     pub nim_key_env: String,
-    #[arg(long, default_value_t = 60, value_parser = clap::value_parser!(u64).range(1..))]
+    #[arg(long, default_value_t = 180, value_parser = clap::value_parser!(u64).range(1..))]
     pub ai_timeout: u64,
     #[arg(long, default_value_t = 12000, value_parser = clap::value_parser!(u64).range(1024..=65536))]
     pub context_bytes: u64,
@@ -73,6 +74,11 @@ pub struct AiArgs {
     pub json: bool,
     #[arg(long)]
     pub question: Option<String>,
+    /// General conversation without repository evidence.
+    #[arg(long)]
+    pub chat: bool,
+    #[arg(long, hide = true)]
+    pub chat_history: Option<String>,
 }
 impl Default for AiArgs {
     fn default() -> Self {
@@ -83,11 +89,13 @@ impl Default for AiArgs {
             nim_model: None,
             nim_endpoint: None,
             nim_key_env: "NVIDIA_API_KEY".into(),
-            ai_timeout: 60,
+            ai_timeout: 180,
             context_bytes: 12000,
             context_only: false,
             json: false,
             question: None,
+            chat: false,
+            chat_history: None,
         }
     }
 }
@@ -189,6 +197,13 @@ enum BaselineCommand {
 }
 #[derive(Subcommand)]
 enum JobCommand {
+    /// List persisted job metadata without refreshing source or running work.
+    List {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=100))]
+        limit: u32,
+    },
     Create {
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -219,6 +234,19 @@ enum JobCommand {
 }
 #[derive(Subcommand)]
 enum AuditWorkflowCommand {
+    /// Recover legacy JSON for explicit validation/import; never promotes records.
+    ExportLegacy {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Describe retained normalized JSON for a repository-bound audit revision.
+    Artifacts {
+        revision: String,
+        #[arg(long, default_value = ".")]
+        project: PathBuf,
+    },
     /// List retained revision metadata without asserting historical source freshness.
     History {
         #[arg(default_value = ".")]
@@ -263,6 +291,10 @@ enum AuditWorkflowCommand {
     },
 }
 fn main() {
+    if let Err(error) = env_config::load() {
+        eprintln!("Configuration error: {error}");
+        std::process::exit(2);
+    }
     let cli = Cli::parse();
     let result = match cli.command.unwrap_or_else(|| Commands::Tui {
         path: PathBuf::from("."),
@@ -285,6 +317,15 @@ fn main() {
         Commands::Job { command } => (|| -> anyhow::Result<i32> {
             use sentinel_graph::{jobs::JobState, Engine};
             let (job, executing) = match command {
+                JobCommand::List { path, limit } => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(
+                            &Engine::open(path)?.list_scan_jobs(limit as usize)?
+                        )?
+                    );
+                    return Ok(0);
+                }
                 JobCommand::Create {
                     path,
                     max_attempts,
@@ -336,6 +377,12 @@ fn main() {
         Commands::AuditWorkflow { command } => (|| -> anyhow::Result<i32> {
             use sentinel_graph::{audit_workflow, Engine};
             let value = match command {
+                AuditWorkflowCommand::ExportLegacy { path, output } => {
+                    serde_json::json!({"output":Engine::open(path)?.export_legacy_audit_run(&output)?,"validated":false,"imported":false})
+                }
+                AuditWorkflowCommand::Artifacts { revision, project } => {
+                    serde_json::to_value(Engine::open(project)?.audit_artifacts(&revision)?)?
+                }
                 AuditWorkflowCommand::History { path, limit } => {
                     serde_json::to_value(Engine::open(path)?.audit_history(limit as usize)?)?
                 }

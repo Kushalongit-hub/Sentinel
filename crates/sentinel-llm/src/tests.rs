@@ -235,12 +235,16 @@ struct Project(std::path::PathBuf);
 impl Project {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!(
-            "sentinel-context-{}-{}",
+            "sentinel-context-{}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            {
+                static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            }
         ));
         std::fs::create_dir(&root).unwrap();
         Self(root)
@@ -295,4 +299,50 @@ fn context_budget_preserves_focused_source_lines() {
     let excerpt = &context.excerpts[0];
     assert!(excerpt.start_line <= 201 && excerpt.end_line >= 201);
     assert!(excerpt.text.contains("201: dangerous_call(user_input)"));
+}
+
+#[test]
+fn local_openai_protocol_uses_v1_without_cloud_credentials() {
+    let mock = Mock::new(200, nim_body());
+    let mut local = mock.config(false);
+    local.endpoint.push_str("/v1/");
+    let router =
+        HybridClient::new(local, None, ProviderMode::Local, Duration::from_secs(3)).unwrap();
+    let result = router.explain(&request());
+    assert!(result.failures.is_empty());
+    assert_eq!(result.responses[0].provider, "local-openai");
+    let (headers, body) = mock.request.recv().unwrap();
+    assert!(headers.starts_with("POST /v1/chat/completions "));
+    assert!(!headers.to_lowercase().contains("authorization:"));
+    assert_eq!(
+        body["messages"],
+        serde_json::to_value(request().messages).unwrap()
+    );
+    assert_eq!(body["stream"], false);
+    assert!(body.get("options").is_none());
+}
+
+#[test]
+fn nim_glm_receives_bounded_reasoning_and_preserves_shared_messages() {
+    let mock = Mock::new(200, nim_body());
+    let mut nim = mock.config(true);
+    nim.model = "z-ai/glm-5.3".into();
+    let result = HybridClient::new(
+        mock.config(false),
+        Some(nim),
+        ProviderMode::Nim,
+        Duration::from_secs(3),
+    )
+    .unwrap()
+    .explain(&request());
+    assert!(result.failures.is_empty());
+    let (headers, body) = mock.request.recv().unwrap();
+    assert!(headers.starts_with("POST /v1/chat/completions "));
+    assert_eq!(body["model"], "z-ai/glm-5.3");
+    assert_eq!(body["reasoning_effort"], "low");
+    assert_eq!(body["max_tokens"], 8192);
+    assert_eq!(
+        body["messages"],
+        serde_json::to_value(request().messages).unwrap()
+    );
 }

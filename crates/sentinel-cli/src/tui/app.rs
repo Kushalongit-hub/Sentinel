@@ -65,6 +65,11 @@ pub struct App {
     pub question: String,
     pub ai_finding: Option<String>,
     pub ai_text: String,
+    pub chat_history: Vec<sentinel_llm::Message>,
+    pub chat_input: String,
+    pub chat_context: bool,
+    pub chat_follow: bool,
+    pub chat_preview: Option<String>,
     pub intelligence_text: String,
     pub external: bool,
     pub semgrep: String,
@@ -83,10 +88,10 @@ impl App {
         let mut rules = engine.catalog().cloned().collect::<Vec<_>>();
         rules.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(Self { project:project.canonicalize()?,view:View::Overview,navigation_focus:true,navigation_selected:0,report:None,rules,selected:0,rule_selected:0,filter:String::new(),scroll:0,provider:0,
-            local_model:std::env::var("SENTINEL_LOCAL_MODEL").unwrap_or_else(|_|"llama2".into()),nim_model:std::env::var("SENTINEL_NIM_MODEL").unwrap_or_default(),
+            local_model:std::env::var("SENTINEL_LOCAL_MODEL").unwrap_or_else(|_|"qwen/qwen3.5-9b".into()),nim_model:std::env::var("SENTINEL_NIM_MODEL").unwrap_or_else(|_|"z-ai/glm-5.3".into()),
             question:"Explain the architecture, entry points, data flow, and testing opportunities. Cite source evidence.".into(),ai_finding:None,
             intelligence_text:"Persistent security intelligence\n\nPress g to index the repository, or w to verify the patch against a saved baseline / Git HEAD.\n\nPress u to inspect imported audit coverage and source freshness. Detailed graph and context queries are available through the repository-bound MCP server.".into(),
-            ai_text:"Your code, explained.\n\nChoose a provider, inspect the shared context, and ask a question.\n\nLocal runs only Ollama. Cloud runs only NVIDIA NIM. Both runs them concurrently on identical evidence.\n\nAI answers are advisory and do not change scan findings.".into(),external:false,semgrep:String::new(),threshold:Severity::Info,editor:None,help:false,help_scroll:0,
+            chat_history:vec![],chat_input:String::new(),chat_context:false,chat_follow:true,chat_preview:None,ai_text:"Chat with Sentinel.\n\nType a message and press Enter. Alt+m selects a provider; Alt+p attaches project evidence.\n\nLocal uses your configured LM Studio/Bionic or Ollama server. Cloud runs only NVIDIA NIM. Both runs them concurrently on identical evidence.\n\nAI answers are advisory and do not change scan findings.".into(),external:false,semgrep:String::new(),threshold:Severity::Info,editor:None,help:false,help_scroll:0,
             status:"Ready. Press a to audit this project, or ? for the keyboard guide.".into(),status_error:false,job:None,tick:0 })
     }
     pub fn provider_name(&self) -> &'static str {
@@ -170,7 +175,10 @@ impl App {
                 self.selected = 0;
                 self.ai_finding = None;
                 self.scroll = 0;
-                self.ai_text = "Project changed. Preview context or ask a new question.".into();
+                self.chat_history.clear();
+                self.chat_input.clear();
+                self.chat_preview = None;
+                self.ai_text = "Project changed. Conversation cleared.".into();
                 self.notify("Project updated. Press a to audit.", false);
             }
             Edit::Filter => {
@@ -182,6 +190,7 @@ impl App {
                 if editor.value.trim().is_empty() {
                     anyhow::bail!("question cannot be empty");
                 }
+                self.chat_input = editor.value.clone();
                 self.question = editor.value;
             }
             Edit::LocalModel => self.local_model = editor.value.trim().into(),
@@ -215,6 +224,15 @@ impl App {
             anyhow::bail!("an operation is already running; Esc cancels it");
         }
         self.navigation_focus = false;
+        if matches!(kind, Kind::Explain) {
+            self.chat_preview = None;
+        }
+        if matches!(kind, Kind::Preview) && !self.chat_input.trim().is_empty() {
+            self.question = self.chat_input.clone();
+        }
+        if matches!(kind, Kind::Explain | Kind::Preview) {
+            crate::env_config::load()?;
+        }
         let root = self.root();
         let mut command = Command::new(std::env::current_exe()?);
         command.current_dir(&root);
@@ -241,6 +259,18 @@ impl App {
             Kind::AuditStatus => {
                 command.arg("audit-workflow").arg("status").arg(&root);
             }
+            Kind::JobList => {
+                command
+                    .args(["job", "list"])
+                    .arg(&root)
+                    .args(["--limit", "20"]);
+            }
+            Kind::AuditHistory => {
+                command
+                    .args(["audit-workflow", "history"])
+                    .arg(&root)
+                    .args(["--limit", "20"]);
+            }
             Kind::Index | Kind::Verify => {
                 command
                     .arg(if matches!(kind, Kind::Index) {
@@ -265,6 +295,12 @@ impl App {
                     &self.local_model,
                     "--json",
                 ]);
+                if !self.chat_context && self.ai_finding.is_none() {
+                    command.arg("--chat");
+                }
+                command
+                    .arg("--chat-history")
+                    .arg(serde_json::to_string(&self.chat_history)?);
                 if !self.nim_model.is_empty() {
                     command.arg("--nim-model").arg(&self.nim_model);
                 }
@@ -280,7 +316,7 @@ impl App {
                 if matches!(kind, Kind::Audit | Kind::Diff | Kind::Index | Kind::Verify) {
                     600
                 } else {
-                    90
+                    210
                 },
             ),
         )?);
@@ -293,6 +329,8 @@ impl App {
                 Kind::Index => "Indexing security graph...",
                 Kind::Verify => "Verifying patch...",
                 Kind::AuditStatus => "Loading audit coverage and source freshness...",
+                Kind::AuditHistory => "Loading the latest 20 audit revisions...",
+                Kind::JobList => "Loading persisted static jobs...",
             },
             false,
         );
@@ -300,6 +338,31 @@ impl App {
     }
     fn complete(&mut self, completed: Completed) -> Result<()> {
         match completed.kind {
+            Kind::JobList => {
+                if completed.code != 0 {
+                    anyhow::bail!("Job listing failed: {}", safe(&completed.stderr));
+                }
+                let jobs: sentinel_graph::jobs::JobList =
+                    serde_json::from_slice(&completed.stdout)?;
+                self.intelligence_text = render_jobs(&jobs);
+                self.view = View::Intelligence;
+                self.scroll = 0;
+                self.notify(
+                    "Stored jobs loaded; no work resumed and source freshness remains unchecked.",
+                    false,
+                );
+            }
+            Kind::AuditHistory => {
+                if completed.code != 0 {
+                    anyhow::bail!("Audit history failed: {}", safe(&completed.stderr));
+                }
+                let history: sentinel_graph::audit_workflow::AuditHistory =
+                    serde_json::from_slice(&completed.stdout)?;
+                self.intelligence_text = render_audit_history(&history);
+                self.view = View::Intelligence;
+                self.scroll = 0;
+                self.notify("Audit history loaded. Historical source freshness is unchecked; u checks the latest audit.", false);
+            }
             Kind::Index | Kind::Verify | Kind::AuditStatus => {
                 let value: serde_json::Value = serde_json::from_slice(&completed.stdout)
                     .with_context(|| {
@@ -340,13 +403,16 @@ impl App {
                 self.notify(format!("{outcome:?}: {count} findings. Exit {}. Scan history saved when persistence succeeded.",completed.code),completed.code==2);
             }
             Kind::Explain | Kind::Preview => {
+                if completed.stdout.is_empty() {
+                    anyhow::bail!("AI command failed: {}", safe(&completed.stderr));
+                }
                 let json: serde_json::Value = serde_json::from_slice(&completed.stdout)
                     .with_context(|| format!("AI command failed: {}", safe(&completed.stderr)))?;
                 if matches!(completed.kind, Kind::Preview) {
-                    self.ai_text = format!(
+                    self.chat_preview = Some(format!(
                         "SHARED CONTEXT PREVIEW\nNo provider was contacted.\n\n{}",
                         serde_json::to_string_pretty(&json)?
-                    );
+                    ));
                 } else {
                     let mut text = format!(
                         "CONTEXT {}\n\n",
@@ -379,21 +445,58 @@ impl App {
                             ));
                         }
                     }
-                    self.ai_text = text;
+                    self.chat_history.push(sentinel_llm::Message {
+                        role: "user".into(),
+                        content: self.question.clone(),
+                    });
+                    if let Some(responses) = json["responses"].as_array() {
+                        let answers = responses
+                            .iter()
+                            .map(|a| {
+                                format!(
+                                    "{} / {}: {}",
+                                    a["provider"].as_str().unwrap_or("provider"),
+                                    a["model"].as_str().unwrap_or("model"),
+                                    a["text"].as_str().unwrap_or("")
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n\n");
+                        if !answers.is_empty() {
+                            self.chat_history.push(sentinel_llm::Message {
+                                role: "assistant".into(),
+                                content: if answers.len() <= 8192 {
+                                    answers
+                                } else {
+                                    format!(
+                                        "{}\n[Earlier response shortened in conversation context]",
+                                        answers.chars().take(1800).collect::<String>()
+                                    )
+                                },
+                            });
+                        }
+                    }
+                    while self.chat_history.len() > 20
+                        || serde_json::to_vec(&self.chat_history)?.len() > 12000
+                    {
+                        self.chat_history.drain(..self.chat_history.len().min(2));
+                    }
+                    self.chat_follow = true;
+                    self.ai_text.push_str(&format!(
+                        "\n\nYOU\n{}\n\n{}",
+                        safe(&self.question),
+                        text
+                    ));
                 }
                 self.ai_text = safe(&self.ai_text);
                 if self.ai_text.len() > 128 * 1024 {
-                    let end = self
+                    let start = self
                         .ai_text
                         .char_indices()
-                        .take_while(|(i, _)| *i < 128 * 1024)
-                        .last()
+                        .find(|(i, _)| *i >= self.ai_text.len() - 128 * 1024)
                         .map(|(i, _)| i)
                         .unwrap_or(0);
-                    self.ai_text.truncate(end);
-                    self.ai_text.push_str(
-                        "\n\nDisplay truncated. Use the explanation CLI for full output.",
-                    );
+                    self.ai_text = format!("[Earlier display omitted]\n{}", &self.ai_text[start..]);
                 }
                 self.scroll = 0;
                 self.view = View::Ai;
@@ -482,12 +585,85 @@ impl App {
             }
             return false;
         }
+        if self.view == View::Ai
+            && !self.navigation_focus
+            && key.modifiers.contains(KeyModifiers::CONTROL)
+        {
+            if key.code == KeyCode::Char('u') {
+                self.chat_input.clear();
+            }
+            return false;
+        }
+        if self.view == View::Ai
+            && !self.navigation_focus
+            && !key
+                .modifiers
+                .intersects(KeyModifiers::ALT | KeyModifiers::CONTROL)
+        {
+            match key.code {
+                KeyCode::Char(c) if !c.is_control() => {
+                    if self.chat_input.len() + c.len_utf8() <= 4096 {
+                        self.chat_input.push(c);
+                    }
+                    return false;
+                }
+                KeyCode::Backspace => {
+                    self.chat_input.pop();
+                    return false;
+                }
+                KeyCode::Enter => {
+                    if self.job.is_none() && !self.chat_input.trim().is_empty() {
+                        self.question = self.chat_input.clone();
+                        match self.start(Kind::Explain) {
+                            Ok(()) => self.chat_input.clear(),
+                            Err(e) => self.notify(format!("{e:#}"), true),
+                        }
+                    }
+                    return false;
+                }
+                _ => {}
+            }
+        }
+        if self.view == View::Ai
+            && matches!(
+                key.code,
+                KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home
+            )
+        {
+            self.chat_follow = false;
+        }
+        if self.view == View::Ai && key.code == KeyCode::End {
+            self.chat_follow = true;
+            return false;
+        }
+        if self.view == View::Ai && key.modifiers.contains(KeyModifiers::ALT) {
+            match key.code {
+                KeyCode::Char('p') if self.job.is_none() => {
+                    self.chat_context = !self.chat_context;
+                    self.ai_finding = None;
+                    return false;
+                }
+                KeyCode::Char('r') if self.job.is_none() => {
+                    self.chat_history.clear();
+                    self.chat_input.clear();
+                    self.chat_preview = None;
+                    self.ai_finding = None;
+                    self.ai_text = "New conversation.".into();
+                    self.scroll = 0;
+                    return false;
+                }
+                _ => {}
+            }
+        }
         let action: Result<()> = match key.code {
             KeyCode::Char('q') | KeyCode::Char('Q') => {
                 self.job.take();
                 return true;
             }
             KeyCode::Esc => {
+                if self.chat_preview.take().is_some() {
+                    return false;
+                }
                 if self.job.take().is_some() {
                     self.notify(
                         "Operation stopped. Scan writes already committed remain in history.",
@@ -528,6 +704,8 @@ impl App {
             KeyCode::Char('g') => self.start(Kind::Index),
             KeyCode::Char('w') => self.start(Kind::Verify),
             KeyCode::Char('u') => self.start(Kind::AuditStatus),
+            KeyCode::Char('h') => self.start(Kind::AuditHistory),
+            KeyCode::Char('o') => self.start(Kind::JobList),
             KeyCode::Char('a') => self.start(Kind::Audit),
             KeyCode::Char('d') => self.start(Kind::Diff),
             KeyCode::Char('p') => {
@@ -592,10 +770,13 @@ impl App {
             KeyCode::Char('c') => {
                 self.navigation_focus = false;
                 self.ai_finding = None;
+                self.chat_context = true;
+                self.question = "Explain the architecture, entry points, data flow, and testing opportunities. Cite source evidence.".into();
+                self.chat_input = self.question.clone();
                 self.view = View::Ai;
                 self.scroll = 0;
                 self.notify(
-                    "Codebase selected. Enter requests an explanation; b previews context.",
+                    "Codebase selected. Enter requests an explanation; Alt+b previews context.",
                     false,
                 );
                 Ok(())
@@ -606,10 +787,12 @@ impl App {
                     let title = f.title.clone();
                     self.ai_finding = Some(id);
                     self.question=format!("Explain {title}, relevant code behavior, impact, remediation, and regression tests.");
+                    self.chat_input = self.question.clone();
+                    self.navigation_focus = false;
                     self.view = View::Ai;
                     self.scroll = 0;
                     self.notify(
-                        "Finding selected for explanation. Enter submits; b previews context.",
+                        "Finding selected for explanation. Enter submits; Alt+b previews context.",
                         false,
                     );
                     Ok(())
@@ -617,7 +800,13 @@ impl App {
                     Err(anyhow::anyhow!("select a finding first"))
                 }
             }
-            KeyCode::Char('b') if self.view == View::Ai => self.start(Kind::Preview),
+            KeyCode::Char('b') if self.view == View::Ai => {
+                if self.chat_preview.take().is_some() {
+                    Ok(())
+                } else {
+                    self.start(Kind::Preview)
+                }
+            }
             KeyCode::Enter if self.navigation_focus => {
                 self.view = View::from_index(self.navigation_selected);
                 self.navigation_focus = false;
@@ -692,6 +881,15 @@ impl App {
         false
     }
     pub fn paste(&mut self, text: &str) {
+        if self.editor.is_none() && self.view == View::Ai && !self.navigation_focus {
+            for c in text.chars().filter(|c| !c.is_control()) {
+                if self.chat_input.len() + c.len_utf8() > 4096 {
+                    break;
+                }
+                self.chat_input.push(c);
+            }
+            return;
+        }
         if let Some(editor) = &mut self.editor {
             for c in text.chars().filter(|c| !c.is_control()) {
                 if editor.value.len() + c.len_utf8() > 4096 {
@@ -702,9 +900,116 @@ impl App {
         }
     }
 }
+fn render_jobs(list: &sentinel_graph::jobs::JobList) -> String {
+    let mut text = String::from("STATIC SCAN JOBS / NEWEST FIRST\nSOURCE FRESHNESS: UNCHECKED\nStored state only. Completed does not mean no vulnerabilities or current-source coverage.\nTime budgets are soft checks between work units. No target code or AI is executed.\n\n");
+    for job in &list.jobs {
+        text.push_str(&format!("{:?} / {}\n  Created: {}\n  Units recorded: {}/{} | Attempts reserved: {}/{}\n  Elapsed: {} / {} ms | Active file: {}\n  Snapshot: {}\n\n",job.state,safe(&job.id),safe(&job.created_at),job.units_recorded,job.total_files,job.attempts_reserved,job.max_attempts,job.elapsed_ms,job.max_elapsed_ms,safe(job.active_file.as_deref().unwrap_or("none")),safe(&job.source_snapshot)));
+    }
+    if list.jobs.is_empty() {
+        text.push_str("No persisted static jobs in this project.\n");
+    }
+    if list.has_more {
+        text.push_str("More jobs retained. Use sentinel job list --limit 100.\n");
+    }
+    text.push_str("Inspect: sentinel job status <id>\nResume explicitly: sentinel job resume <id> --max-units 1\nCancel: sentinel job cancel <id>\nRun these commands from this project, or supply --project <path>.\n");
+    text
+}
+fn render_audit_history(history: &sentinel_graph::audit_workflow::AuditHistory) -> String {
+    let mut text = String::from("AUDIT REVISION HISTORY\nNewest imports first / at most 20 revisions\n\nSOURCE FRESHNESS: UNCHECKED\nLatest means the current imported revision, not current source or a security verdict.\nReviewer identities and verdicts are imported attestations.\nPress u to check coverage and freshness of the latest audit.\n\n");
+    if history.revisions.is_empty() {
+        text.push_str("No retained audit revisions for this project.\n");
+    }
+    for revision in &history.revisions {
+        text.push_str(&format!(
+            "{}{} / {}\n  Imported: {}\n  Revision: {}\n  Source snapshot: {}\n\n",
+            if revision.is_latest { "[LATEST] " } else { "" },
+            safe(&revision.run_id),
+            safe(&revision.run_status),
+            safe(&revision.imported_at),
+            safe(&revision.revision_id),
+            safe(&revision.source_snapshot)
+        ));
+    }
+    if history.has_more {
+        text.push_str("More revisions retained. Use sentinel audit-workflow history --limit 100 for a larger bounded list.\n");
+    }
+    text
+}
 pub fn safe(text: &str) -> String {
     text.chars()
         .filter(|c| !c.is_control() || matches!(c, '\n' | '\t'))
         .collect::<String>()
         .replace('\t', "    ")
+}
+
+#[cfg(test)]
+mod chat_tests {
+    use super::*;
+    #[test]
+    fn job_browser_labels_stored_state_and_explicit_actions() {
+        let empty = sentinel_graph::jobs::JobList {
+            jobs: vec![],
+            has_more: false,
+            source_freshness_checked: false,
+        };
+        let text = render_jobs(&empty);
+        assert!(text.contains("SOURCE FRESHNESS: UNCHECKED"));
+        assert!(text.contains("Completed does not mean no vulnerabilities"));
+        assert!(text.contains("No persisted static jobs"));
+        assert!(text.contains("Resume explicitly"));
+    }
+    #[test]
+    fn audit_history_labels_freshness_and_preserves_revision_identity() {
+        use sentinel_graph::audit_workflow::{AuditHistory, AuditRevision};
+        let history = AuditHistory {
+            revisions: vec![AuditRevision {
+                revision_id: "rev-1".into(),
+                run_id: "run-1".into(),
+                source_snapshot: "sha256:abc".into(),
+                run_status: "complete".into(),
+                imported_at: "2026-10-07".into(),
+                is_latest: true,
+            }],
+            has_more: true,
+            source_freshness_checked: false,
+        };
+        let rendered = render_audit_history(&history);
+        assert!(rendered.contains("SOURCE FRESHNESS: UNCHECKED"));
+        assert!(rendered.contains("[LATEST] run-1"));
+        assert!(rendered.contains("sha256:abc"));
+        assert!(rendered.contains("More revisions retained"));
+        let empty = AuditHistory {
+            revisions: vec![],
+            has_more: false,
+            source_freshness_checked: false,
+        };
+        assert!(render_audit_history(&empty).contains("No retained audit revisions"));
+    }
+    #[test]
+    fn responses_are_retained_and_preview_preserves_conversation() {
+        let mut app = App::new(std::env::current_dir().unwrap()).unwrap();
+        app.question = "Compare these approaches".into();
+        let output = serde_json::json!({"context_id":"test", "responses":[{"provider":"ollama","model":"local","text":"First answer"},{"provider":"nvidia-nim","model":"cloud","text":"Second answer"}], "failures":[], "coverage_notes":[]});
+        app.complete(Completed {
+            kind: Kind::Explain,
+            code: 0,
+            stdout: serde_json::to_vec(&output).unwrap(),
+            stderr: String::new(),
+        })
+        .unwrap();
+        assert_eq!(app.chat_history.len(), 2);
+        assert!(app.chat_history[1].content.contains("First answer"));
+        assert!(app.chat_history[1].content.contains("Second answer"));
+        let transcript = app.ai_text.clone();
+        app.complete(Completed {
+            kind: Kind::Preview,
+            code: 0,
+            stdout: b"{}".to_vec(),
+            stderr: String::new(),
+        })
+        .unwrap();
+        assert!(app.chat_preview.is_some());
+        assert_eq!(app.ai_text, transcript);
+        assert_eq!(app.chat_history.len(), 2);
+    }
 }

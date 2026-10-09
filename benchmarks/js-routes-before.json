@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "corpus_sha256": "5424e028d4661e7b813dcc774e57a5564ecb9625ccd727ec562b708851485ff1",
+  "binary_sha256": "a54dc38e40d9977887fede6db9b0bd6b845a9e5f5463335876d6ca30386b8362",
+  "split": "development",
+  "scope": "case-level detection of mapped rules; additional findings are unscored",
+  "summary": {
+    "tp": 0,
+    "fp": 0,
+    "tn": 4,
+    "fn": 4,
+    "failed": 0,
+    "precision": {
+      "value": null,
+      "wilson_95": null,
+      "denominator": 0
+    },
+    "recall": {
+      "value": 0.0,
+      "wilson_95": [
+        0.0,
+        0.4898908364545973
+      ],
+      "denominator": 4
+    },
+    "complete_cases": 8,
+    "total_cases": 8
+  },
+  "per_class": {
+    "sql-injection": {
+      "tp": 0,
+      "fp": 0,
+      "tn": 4,
+      "fn": 4,
+      "failed": 0,
+      "precision": {
+        "value": null,
+        "wilson_95": null,
+        "denominator": 0
+      },
+      "recall": {
+        "value": 0.0,
+        "wilson_95": [
+          0.0,
+          0.4898908364545973
+        ],
+        "denominator": 4
+      },
+      "complete_cases": 8,
+      "total_cases": 8
+    }
+  },
+  "per_engine": {
+    "graph": {
+      "tp": 0,
+      "fp": 0,
+      "tn": 4,
+      "fn": 4,
+      "failed": 0,
+      "precision": {
+        "value": null,
+        "wilson_95": null,
+        "denominator": 0
+      },
+      "recall": {
+        "value": 0.0,
+        "wilson_95": [
+          0.0,
+          0.4898908364545973
+        ],
+        "denominator": 4
+      },
+      "complete_cases": 8,
+      "total_cases": 8
+    }
+  },
+  "cases": [
+    {
+      "id": "express-inline-positive",
+      "family": "express-inline",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "9897ab53090db4f1fb0092f065aa39c6f516061f94814b555a55db4f4b0808ef",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 1904.0485999994416
+    },
+    {
+      "id": "express-inline-safe",
+      "family": "express-inline",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "76ba77f884b03862d3ba1d699568d025e211868a2fb8fe84220cef74c0e39fdc",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 36.47309999905701
+    },
+    {
+      "id": "fastify-named-positive",
+      "family": "fastify-named",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "af9a732c4aa5c566d06830eae7cf89cb42cb5a71de87ab6130344b58675c2c52",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 38.35780000008526
+    },
+    {
+      "id": "fastify-named-safe",
+      "family": "fastify-named",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "c27988e28dec474bd831c2f785fe703d784b023cc50edd210b5c5b97205777f6",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 41.15600000113773
+    },
+    {
+      "id": "express-router-positive",
+      "family": "express-router",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "7e8d657b9ed89575f96ec5be94ece215ee25ecd3b87d3f373563f4182bc081f1",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 38.21500000049127
+    },
+    {
+      "id": "express-router-safe",
+      "family": "express-router",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "4c28843438a62c8028602474acc5d5fcd0bd18020528a30c75619b75d3e2e2df",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 37.55719999935536
+    },
+    {
+      "id": "fastify-helper-positive",
+      "family": "fastify-helper",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "f281abc3d5293a13a29ddee94e04c6ed08391b84903c8f4c63f773f4fed31dbc",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 42.49499999968975
+    },
+    {
+      "id": "fastify-helper-safe",
+      "family": "fastify-helper",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "7c5d4a3cb27623236ed95ce7d25d2a8226f8d2015c368bae8fc456167f55503b",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 39.85669999929087
+    }
+  ]
+}

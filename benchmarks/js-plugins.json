@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "label_status": "Author-labelled development CommonJS, Router aliases and bounded local plugin cases",
+  "cases": [
+    {
+      "id": "require-express-positive",
+      "family": "require-express",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "const express = require('express'); const app = express(); app.get('/q', incoming => db.execute(incoming.query.q));"
+      },
+      "rationale": "Author-labelled lexical route/plugin regression; not independent evidence or runtime reachability proof"
+    },
+    {
+      "id": "require-express-safe",
+      "family": "require-express",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "const express = require('express'); const app = express(); app.get('/q', incoming => db.execute('SELECT * FROM users WHERE id=?', [incoming.query.q]));"
+      },
+      "rationale": "Author-labelled lexical route/plugin regression; not independent evidence or runtime reachability proof"
+    },
+    {
+      "id": "require-fastify-positive",
+      "family": "require-fastify",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "const app = require('fastify')(); app.get('/q', incoming => db.execute(incoming.query.q));"
+      },
+      "rationale": "Author-labelled lexical route/plugin regression; not independent evidence or runtime reachability proof"
+    },
+    {
+      "id": "require-fastify-safe",
+      "family": "require-fastify",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "const app = require('fastify')(); app.get('/q', incoming => db.execute('SELECT * FROM users WHERE id=?', [incoming.query.q]));"
+      },
+      "rationale": "Author-labelled lexical route/plugin regression; not independent evidence or runtime reachability proof"
+    },
+    {
+      "id": "router-alias-positive",
+      "family": "router-alias",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "const express = require('express'); const router = express.Router(); const handle = incoming => db.execute(incoming.query.q); const alias = handle; router.get('/q', alias);"
+      },
+      "rationale": "Author-labelled lexical route/plugin regression; not independent evidence or runtime reachability proof"
+    },
+    {
+      "id": "router-alias-safe",
+      "family": "router-alias",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "const express = require('express'); const router = express.Router(); const handle = incoming => db.execute('SELECT * FROM users WHERE id=?', [incoming.query.q]); const alias = handle; router.get('/q', alias);"
+      },
+      "rationale": "Author-labelled lexical route/plugin regression; not independent evidence or runtime reachability proof"
+    },
+    {
+      "id": "inline-plugin-positive",
+      "family": "inline-plugin",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "const make = require('fastify'); const app = make(); app.register(async function plugin(server) { server.get('/q', incoming => db.execute(incoming.query.q)); });"
+      },
+      "rationale": "Author-labelled lexical route/plugin regression; not independent evidence or runtime reachability proof"
+    },
+    {
+      "id": "inline-plugin-safe",
+      "family": "inline-plugin",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "const make = require('fastify'); const app = make(); app.register(async function plugin(server) { server.get('/q', incoming => db.execute('SELECT * FROM users WHERE id=?', [incoming.query.q])); });"
+      },
+      "rationale": "Author-labelled lexical route/plugin regression; not independent evidence or runtime reachability proof"
+    },
+    {
+      "id": "named-plugin-positive",
+      "family": "named-plugin",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "import make from 'fastify'; const app = make(); function plugin(server) { const handle = incoming => db.execute(incoming.query.q); const alias = handle; server.get('/q', alias); } app.register(plugin);"
+      },
+      "rationale": "Author-labelled lexical route/plugin regression; not independent evidence or runtime reachability proof"
+    },
+    {
+      "id": "named-plugin-safe",
+      "family": "named-plugin",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "import make from 'fastify'; const app = make(); function plugin(server) { const handle = incoming => db.execute('SELECT * FROM users WHERE id=?', [incoming.query.q]); const alias = handle; server.get('/q', alias); } app.register(plugin);"
+      },
+      "rationale": "Author-labelled lexical route/plugin regression; not independent evidence or runtime reachability proof"
+    },
+    {
+      "id": "nested-plugin-positive",
+      "family": "nested-plugin",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "const app = require('fastify')(); app.register(async function outer(server) { server.register(async function inner(child) { child.get('/q', incoming => db.execute(incoming.query.q)); }); });"
+      },
+      "rationale": "Author-labelled lexical route/plugin regression; not independent evidence or runtime reachability proof"
+    },
+    {
+      "id": "nested-plugin-safe",
+      "family": "nested-plugin",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "const app = require('fastify')(); app.register(async function outer(server) { server.register(async function inner(child) { child.get('/q', incoming => db.execute('SELECT * FROM users WHERE id=?', [incoming.query.q])); }); });"
+      },
+      "rationale": "Author-labelled lexical route/plugin regression; not independent evidence or runtime reachability proof"
+    }
+  ]
+}

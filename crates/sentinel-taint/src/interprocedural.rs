@@ -36,6 +36,34 @@ impl Value {
     }
 }
 type Env = BTreeMap<String, Value>;
+fn lookup(env: &Env, name: &str) -> Value {
+    let mut prefix = name;
+    loop {
+        if let Some(value) = env.get(prefix) {
+            return value.clone();
+        }
+        let Some((parent, _)) = prefix.rsplit_once('.') else {
+            return Value::default();
+        };
+        prefix = parent;
+    }
+}
+fn merge_environments(left: &mut Env, right: Env) {
+    let keys = left
+        .keys()
+        .chain(right.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let merged = keys
+        .into_iter()
+        .map(|name| {
+            let mut value = lookup(left, &name);
+            value.merge(lookup(&right, &name));
+            (name, value)
+        })
+        .collect();
+    *left = merged;
+}
 struct Interpreter<'a> {
     symbols: BTreeMap<&'a str, &'a SymbolRecord>,
     calls: BTreeMap<(String, usize, String), String>,
@@ -117,11 +145,7 @@ impl Interpreter<'_> {
         }
         let result = match value {
             FlowExpr::Literal => Value::default(),
-            FlowExpr::Variable { name } => env
-                .get(name)
-                .or_else(|| env.get(name.split('.').next().unwrap_or(name)))
-                .cloned()
-                .unwrap_or_default(),
+            FlowExpr::Variable { name } => lookup(env, name),
             FlowExpr::Source { name, line } => {
                 let source = step(symbol, *line, name);
                 Value(
@@ -280,6 +304,8 @@ impl Interpreter<'_> {
             match statement {
                 FlowStmt::Assign { name, value, .. } => {
                     let value = self.evaluate(value, symbol, env, guards, depth);
+                    let prefix = format!("{name}.");
+                    env.retain(|key, _| !key.starts_with(&prefix));
                     env.insert(name.clone(), value);
                 }
                 FlowStmt::Evaluate { value } => {
@@ -294,17 +320,13 @@ impl Interpreter<'_> {
                     let mut branch_guards = guards.clone();
                     self.statements(yes, symbol, &mut branch, &mut branch_guards, returns, depth);
                     self.statements(no, symbol, env, guards, returns, depth);
-                    for (name, value) in branch {
-                        env.entry(name).or_default().merge(value);
-                    }
+                    merge_environments(env, branch);
                 }
                 FlowStmt::Loop { body } => {
                     for _ in 0..4 {
                         let mut iteration = env.clone();
                         self.statements(body, symbol, &mut iteration, guards, returns, depth);
-                        for (name, value) in iteration {
-                            env.entry(name).or_default().merge(value);
-                        }
+                        merge_environments(env, iteration);
                     }
                     self.notes.insert("loop analysis uses four conservative iterations; complex loop-carried flows may require review".into());
                 }
@@ -322,6 +344,8 @@ impl Interpreter<'_> {
                         .collect::<BTreeSet<_>>();
                     for (name, value) in nested {
                         if !locals.contains(name.as_str()) {
+                            let prefix = format!("{name}.");
+                            env.retain(|key, _| !key.starts_with(&prefix));
                             env.insert(name, value);
                         }
                     }
@@ -389,6 +413,17 @@ pub fn trace_project(
         interpreter.function(symbol, vec![], 0);
     }
     TraceReport {
+        backend: Some(AnalysisBackendIdentity {
+            name: "sentinel-native".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+            semantics_revision: ANALYSIS_SEMANTICS_REVISION,
+        }),
+        source_snapshot: Some(identity(
+            files
+                .iter()
+                .map(|f| (f.path.clone(), f.content_hash.clone()))
+                .collect::<BTreeMap<_, _>>(),
+        )),
         paths: interpreter
             .paths
             .into_values()

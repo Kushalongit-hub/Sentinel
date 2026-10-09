@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "corpus_sha256": "4486c8db4c4a1cef455441df1a35cf88860ee55bcac30bcfbc28ebfccdecf123",
+  "binary_sha256": "649178cc4ce1fc975b1b1719cf5e64eecb7e010978d566934b842d506af17780",
+  "split": "development",
+  "scope": "case-level detection of mapped rules; additional findings are unscored",
+  "summary": {
+    "tp": 0,
+    "fp": 0,
+    "tn": 4,
+    "fn": 4,
+    "failed": 0,
+    "precision": {
+      "value": null,
+      "wilson_95": null,
+      "denominator": 0
+    },
+    "recall": {
+      "value": 0.0,
+      "wilson_95": [
+        0.0,
+        0.4898908364545973
+      ],
+      "denominator": 4
+    },
+    "complete_cases": 8,
+    "total_cases": 8
+  },
+  "per_class": {
+    "sql-injection": {
+      "tp": 0,
+      "fp": 0,
+      "tn": 4,
+      "fn": 4,
+      "failed": 0,
+      "precision": {
+        "value": null,
+        "wilson_95": null,
+        "denominator": 0
+      },
+      "recall": {
+        "value": 0.0,
+        "wilson_95": [
+          0.0,
+          0.4898908364545973
+        ],
+        "denominator": 4
+      },
+      "complete_cases": 8,
+      "total_cases": 8
+    }
+  },
+  "per_engine": {
+    "graph": {
+      "tp": 0,
+      "fp": 0,
+      "tn": 4,
+      "fn": 4,
+      "failed": 0,
+      "precision": {
+        "value": null,
+        "wilson_95": null,
+        "denominator": 0
+      },
+      "recall": {
+        "value": 0.0,
+        "wilson_95": [
+          0.0,
+          0.4898908364545973
+        ],
+        "denominator": 4
+      },
+      "complete_cases": 8,
+      "total_cases": 8
+    }
+  },
+  "cases": [
+    {
+      "id": "express-header-positive",
+      "family": "express-header",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "c25f64ac98f07c8a1ff63724fc4b61c51b03f9dcd00957999a7f434131a8971c",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 2207.04019999539
+    },
+    {
+      "id": "express-header-safe",
+      "family": "express-header",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "476002b272cacdf88699d5824508258ab18f2664ec20c0844b04ff228df7a234",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 68.73959999938961
+    },
+    {
+      "id": "express-cookie-positive",
+      "family": "express-cookie",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "e4c9b13983ed838ccd10a6c36f767480ac016c3bd403649e0f5c21ea7c6f2dba",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 72.1244000014849
+    },
+    {
+      "id": "express-cookie-safe",
+      "family": "express-cookie",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "e69e6341ad1dc9781b240916bb5c756efb4ab2375e3b50bb1af26d6e108be92b",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 66.47700000030454
+    },
+    {
+      "id": "starlette-header-positive",
+      "family": "starlette-header",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "08da381b1d2661599c202ea29e400a041481b610688998366fca9df82e036c21",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 54.66860000160523
+    },
+    {
+      "id": "starlette-header-safe",
+      "family": "starlette-header",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "c13bbed26d6f4409f61e8ec4b53d1ea9029b2cc1fb126b570ef768cc264d6f5d",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 42.983000006643124
+    },
+    {
+      "id": "starlette-cookie-positive",
+      "family": "starlette-cookie",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "1b1b196d5d3eb04fd41e3fc5ff1f36ad443c82c8ee3c941013f8f4b2c21db851",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 50.442899999325164
+    },
+    {
+      "id": "starlette-cookie-safe",
+      "family": "starlette-cookie",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "f63442e9a60bb3c1803c82732ed267d67f7fa194dc09eb5a4f632aebcc91cf87",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 48.255799993057735
+    }
+  ]
+}

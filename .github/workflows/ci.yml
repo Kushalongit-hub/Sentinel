@@ -36,3 +36,12 @@ jobs:
         run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/flows.json --output "$env:RUNNER_TEMP/sentinel-flows.json"
       - name: Measure request-source corpus
         run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/framework-sources.json --output "$env:RUNNER_TEMP/sentinel-framework-sources.json"
+
+      - name: Request metadata development benchmark
+        run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/request-metadata.json --output "$env:RUNNER_TEMP/sentinel-request-metadata.json"
+      - name: Phase 2 native development benchmark
+        run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/phase2-native.json --output "$env:RUNNER_TEMP/sentinel-phase2-native.json"
+      - name: Express Fastify route development benchmark
+        run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/js-routes.json --output "$env:RUNNER_TEMP/sentinel-js-routes.json"
+      - name: CommonJS and local plugin development benchmark
+        run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/js-plugins.json --output "$env:RUNNER_TEMP/sentinel-js-plugins.json"

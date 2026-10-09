@@ -331,3 +331,110 @@ fn malformed_record_diagnostics_do_not_echo_terminal_controls() {
     let error = e.validate_audit_run(&f.run()).unwrap_err().to_string();
     assert!(!error.contains('\u{1b}'));
 }
+
+#[test]
+fn artifact_descriptors_are_revision_scoped_and_transactional() {
+    let f = Fixture::new();
+    let e = f.engine();
+    e.init_audit_run(&f.run(), vec![]).unwrap();
+    let run = e.validate_audit_run(&f.run()).unwrap();
+    e.import_audit_run(&f.run()).unwrap();
+    let revision = e.audit_history(1).unwrap().revisions[0].revision_id.clone();
+    let artifacts = e.audit_artifacts(&revision).unwrap();
+    assert_eq!(artifacts.len(), 4);
+    let findings = artifacts
+        .iter()
+        .find(|a| a.name == "findings.json")
+        .unwrap();
+    assert_eq!(
+        findings.content_hash,
+        sentinel_core::security::identity(&run.findings)
+    );
+    assert_eq!(
+        findings.size_bytes,
+        serde_json::to_vec(&run.findings).unwrap().len()
+    );
+    assert!(artifacts
+        .iter()
+        .all(|a| !a.execution_observed && a.source_snapshot == run.metadata.source_snapshot));
+    e.import_audit_run(&f.run()).unwrap();
+    assert_eq!(
+        e.db.connection()
+            .query_row("SELECT count(*) FROM audit_artifacts", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        4
+    );
+    assert!(e.audit_artifacts("../outside").is_err());
+    assert!(e.audit_artifacts(&"f".repeat(64)).is_err());
+    let other = Fixture::new();
+    assert!(other.engine().audit_artifacts(&revision).is_err());
+    let mut changed = run;
+    changed.findings = json!([candidate(&mut changed, "needs_validation")]);
+    f.save(&changed);
+    e.db.connection().execute_batch("CREATE TRIGGER reject_artifact BEFORE INSERT ON audit_artifacts BEGIN SELECT RAISE(ABORT,'test failure'); END;").unwrap();
+    assert!(e.import_audit_run(&f.run()).is_err());
+    assert_eq!(e.audit_history(100).unwrap().revisions.len(), 1);
+    assert_eq!(
+        e.audit_history(1).unwrap().revisions[0].revision_id,
+        revision
+    );
+}
+#[test]
+fn version_six_upgrade_describes_retained_payload_without_original_files() {
+    let f = Fixture::new();
+    let e = f.engine();
+    e.init_audit_run(&f.run(), vec![]).unwrap();
+    e.import_audit_run(&f.run()).unwrap();
+    let revision = e.audit_history(1).unwrap().revisions[0].revision_id.clone();
+    let expected = e.audit_artifacts(&revision).unwrap();
+    e.db.connection()
+        .execute_batch("DROP TABLE audit_artifacts; PRAGMA user_version=6;")
+        .unwrap();
+    drop(e);
+    std::fs::remove_dir_all(f.run()).unwrap();
+    let e = f.engine();
+    let actual = e.audit_artifacts(&revision).unwrap();
+    assert_eq!(actual.len(), 4);
+    for item in actual {
+        assert!(expected.contains(&item));
+    }
+    assert_eq!(
+        e.db.connection()
+            .query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        7
+    );
+    assert_eq!(
+        e.audit_history(1).unwrap().revisions[0].revision_id,
+        revision
+    );
+}
+
+#[test]
+fn legacy_export_requires_explicit_revalidation_and_preserves_memory() {
+    let f = Fixture::new();
+    let e = f.engine();
+    e.init_audit_run(&f.run(), vec![]).unwrap();
+    let run = e.validate_audit_run(&f.run()).unwrap();
+    let encoded = serde_json::to_string(&run).unwrap();
+    e.db.set_memory("audit-workflow.latest.v1", &encoded)
+        .unwrap();
+    let output = f.0.join("recovered");
+    e.export_legacy_audit_run(&output).unwrap();
+    assert!(e.audit_history(20).unwrap().revisions.is_empty());
+    assert_eq!(
+        e.db.get_memory("audit-workflow.latest.v1")
+            .unwrap()
+            .unwrap(),
+        encoded
+    );
+    assert!(e.export_legacy_audit_run(&output).is_err());
+    assert!(e
+        .export_legacy_audit_run(&f.0.join("repo/forbidden"))
+        .is_err());
+    e.validate_audit_run(&output).unwrap();
+    std::fs::write(f.0.join("repo/app.py"), "def changed():\n    return 1\n").unwrap();
+    assert!(e.import_audit_run(&output).is_err());
+    assert!(e.audit_history(20).unwrap().revisions.is_empty());
+}

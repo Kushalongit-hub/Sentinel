@@ -1,0 +1,248 @@
+{
+  "schema_version": 1,
+  "corpus_sha256": "5424e028d4661e7b813dcc774e57a5564ecb9625ccd727ec562b708851485ff1",
+  "binary_sha256": "4466882829374e2c36af19e3675828e3a04b3e6fd88f2bec41ba155b8f01a398",
+  "split": "development",
+  "scope": "case-level detection of mapped rules; additional findings are unscored",
+  "summary": {
+    "tp": 4,
+    "fp": 0,
+    "tn": 4,
+    "fn": 0,
+    "failed": 0,
+    "precision": {
+      "value": 1.0,
+      "wilson_95": [
+        0.5101091635454027,
+        1.0
+      ],
+      "denominator": 4
+    },
+    "recall": {
+      "value": 1.0,
+      "wilson_95": [
+        0.5101091635454027,
+        1.0
+      ],
+      "denominator": 4
+    },
+    "complete_cases": 8,
+    "total_cases": 8
+  },
+  "per_class": {
+    "sql-injection": {
+      "tp": 4,
+      "fp": 0,
+      "tn": 4,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.5101091635454027,
+          1.0
+        ],
+        "denominator": 4
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.5101091635454027,
+          1.0
+        ],
+        "denominator": 4
+      },
+      "complete_cases": 8,
+      "total_cases": 8
+    }
+  },
+  "per_engine": {
+    "graph": {
+      "tp": 4,
+      "fp": 0,
+      "tn": 4,
+      "fn": 0,
+      "failed": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.5101091635454027,
+          1.0
+        ],
+        "denominator": 4
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.5101091635454027,
+          1.0
+        ],
+        "denominator": 4
+      },
+      "complete_cases": 8,
+      "total_cases": 8
+    }
+  },
+  "cases": [
+    {
+      "id": "express-inline-positive",
+      "family": "express-inline",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "9897ab53090db4f1fb0092f065aa39c6f516061f94814b555a55db4f4b0808ef",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 3,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 2215.4181000005337
+    },
+    {
+      "id": "express-inline-safe",
+      "family": "express-inline",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "76ba77f884b03862d3ba1d699568d025e211868a2fb8fe84220cef74c0e39fdc",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 75.62440000037896
+    },
+    {
+      "id": "fastify-named-positive",
+      "family": "fastify-named",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "af9a732c4aa5c566d06830eae7cf89cb42cb5a71de87ab6130344b58675c2c52",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 3,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 51.84299999928044
+    },
+    {
+      "id": "fastify-named-safe",
+      "family": "fastify-named",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "c27988e28dec474bd831c2f785fe703d784b023cc50edd210b5c5b97205777f6",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 49.39610000110406
+    },
+    {
+      "id": "express-router-positive",
+      "family": "express-router",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "7e8d657b9ed89575f96ec5be94ece215ee25ecd3b87d3f373563f4182bc081f1",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 3,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 64.78430000061053
+    },
+    {
+      "id": "express-router-safe",
+      "family": "express-router",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "4c28843438a62c8028602474acc5d5fcd0bd18020528a30c75619b75d3e2e2df",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 70.68470000012894
+    },
+    {
+      "id": "fastify-helper-positive",
+      "family": "fastify-helper",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "f281abc3d5293a13a29ddee94e04c6ed08391b84903c8f4c63f773f4fed31dbc",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 1,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 106.98219999903813
+    },
+    {
+      "id": "fastify-helper-safe",
+      "family": "fastify-helper",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "7c5d4a3cb27623236ed95ce7d25d2a8226f8d2015c368bae8fc456167f55503b",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 56.216900000436
+    }
+  ]
+}

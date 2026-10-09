@@ -57,3 +57,51 @@ Graph cases use `sentinel scan-file ENTRYPOINT --project ROOT`. Rule evaluation 
 `flows-baseline.json` measured four true positives and four true negatives. The request-source before report had two false negatives; the after report detects both with two true negatives. These reports use Windows debug binaries on 2026-10-07; do not compare their timing to the release seed report. Request body/query-parameter names are syntactic source recognition, not verified framework API identity or complete framework support.
 
 Fixture validation enforces case/file/byte budgets, case-insensitive path uniqueness, Windows device-name restrictions and scanner-state separation. Complete reports require successful scan exits, typed findings/counts/notes, completed scanner records and (for graph cases) a complete trace. Contradictory or malformed results fail measurement rather than enter the confusion matrix.
+
+## Header and cookie request shapes
+
+`request-metadata.json` adds eight author-labelled graph development cases. Run it
+with the same harness and `--corpus benchmarks/request-metadata.json`. The retained
+`request-metadata-before.json` / `request-metadata-after.json` release reports show
+four misses fixed and four safe query-parameter counterparts preserved. All four
+corpora now contain 34 cases, including 20 graph cases; these are development
+regressions, not an independent scoreboard. See [source contracts](../docs/framework-source-contracts.md).
+
+## Phase 2 native semantics
+
+`phase2-native.json` adds 14 graph development cases across seven paired families:
+Flask/FastAPI strings, namespace async returns, mixed import aliases, lexical
+scope, literal fields and branch reassignment. Five corpora now contain 48 cases
+(34 graph cases). Installed-baseline and after reports preserve binary/corpus
+hashes; the new corpus improves from 5 TP/2 FN/5 TN/2 FP to 7 TP/7 TN. All older
+34 cases also pass on the final offline release. These are development labels.
+
+```powershell
+python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/phase2-native.json --output phase2-results.json
+```
+
+CI executes this corpus; Rust regressions guard semantic expectations. Harness
+exit zero only means measurement completed, not that accuracy met a release gate.
+See [backend feasibility and outstanding evidence](../docs/phase2-backend-evaluation.md).
+
+## Express/Fastify ESM route contracts
+
+`js-routes.json` adds eight graph development cases for inline Express routes,
+named Fastify routes, Express Router aliases and cross-file helpers. Before/after
+reports show four missed unsafe flows now detected with four safe parameterized
+queries preserved. Six corpora total 56 cases (42 graph), all passing the declared
+mapped scope on the revision-10 release. Labels are author-generated, not held out.
+Run with `--corpus benchmarks/js-routes.json`. Imported handlers/plugins and
+middleware lifecycle need further semantics; incomplete cases are not true negatives.
+
+## CommonJS and bounded local plugins
+
+`js-plugins.json` adds twelve graph development cases for literal CommonJS
+factories, Express Router handler aliases and inline/named/nested Fastify plugins.
+Before/after reports retain corpus and binary hashes. The revision-10 baseline
+has 0 TP, 5 FN, 5 TN and two incomplete cases; incomplete cases are unscored,
+not counted as misses or safe results. The revision-11 release has 6 TP/6 TN with
+no mapped FP/FN or incomplete cases. Seven corpora total 68 cases (54 graph).
+Labels are author-generated development evidence, not held-out or independent.
+CI measures this corpus; runtime mount reachability, hooks and authorization
+ordering are outside the supported contract. See the framework contract document.

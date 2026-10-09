@@ -152,7 +152,17 @@ impl HybridClient {
             let nim = (self.mode != ProviderMode::Local)
                 .then(|| scope.spawn(|| self.call(self.nim.as_ref().unwrap(), true, request)));
             let mut results = vec![];
-            for (name, handle) in [("ollama", local), ("nvidia-nim", nim)] {
+            for (name, handle) in [
+                (
+                    if self.local.endpoint.trim_end_matches('/').ends_with("/v1") {
+                        "local-openai"
+                    } else {
+                        "ollama"
+                    },
+                    local,
+                ),
+                ("nvidia-nim", nim),
+            ] {
                 if let Some(handle) = handle {
                     results.push((
                         name,
@@ -186,20 +196,26 @@ impl HybridClient {
         cloud: bool,
         request: &ExplanationRequest,
     ) -> Result<Explanation> {
+        // A /v1 base explicitly selects the local OpenAI-compatible protocol.
+        let compatible = cloud || config.endpoint.trim_end_matches('/').ends_with("/v1");
         let endpoint = format!(
             "{}{}",
             config.endpoint.trim_end_matches('/'),
-            if cloud {
+            if compatible {
                 "/chat/completions"
             } else {
                 "/api/chat"
             }
         );
-        let body = if cloud {
+        let mut body = if compatible {
             serde_json::json!({"model":config.model,"messages":request.messages,"stream":false,"temperature":0.2,"max_tokens":2048})
         } else {
             serde_json::json!({"model":config.model,"messages":request.messages,"stream":false,"options":{"temperature":0.2,"num_predict":2048,"num_ctx":8192}})
         };
+        if cloud && matches!(config.model.as_str(), "z-ai/glm-5.3" | "z-ai/glm-5-3") {
+            body["reasoning_effort"] = serde_json::json!("low");
+            body["max_tokens"] = serde_json::json!(8192);
+        }
         let mut call = self.client.post(endpoint).json(&body);
         if let Some(key) = &config.api_key {
             call = call.bearer_auth(key);
@@ -227,24 +243,24 @@ impl HybridClient {
         }
         let json: serde_json::Value = serde_json::from_slice(&bytes)
             .map_err(|_| LlmError::Parse("invalid response JSON".into()))?;
-        if cloud
+        if compatible
             && json
                 .pointer("/choices/0/finish_reason")
                 .and_then(|v| v.as_str())
                 .is_some_and(|r| r != "stop")
         {
             return Err(LlmError::Provider(
-                "NIM did not return a complete text response".into(),
+                "OpenAI-compatible provider did not return a complete text response".into(),
             ));
         }
-        if !cloud
+        if !compatible
             && (json.get("done").and_then(|v| v.as_bool()) == Some(false)
                 || json.get("done_reason").and_then(|v| v.as_str()) == Some("length"))
         {
             return Err(LlmError::Provider("Ollama response is incomplete".into()));
         }
         let text = json
-            .pointer(if cloud {
+            .pointer(if compatible {
                 "/choices/0/message/content"
             } else {
                 "/message/content"
@@ -253,7 +269,14 @@ impl HybridClient {
             .filter(|s| !s.trim().is_empty())
             .ok_or_else(|| LlmError::Parse("missing or empty explanation text".into()))?;
         Ok(Explanation {
-            provider: if cloud { "nvidia-nim" } else { "ollama" }.into(),
+            provider: if cloud {
+                "nvidia-nim"
+            } else if compatible {
+                "local-openai"
+            } else {
+                "ollama"
+            }
+            .into(),
             model: config.model.clone(),
             context_id: request.context_id.clone(),
             text: text.into(),

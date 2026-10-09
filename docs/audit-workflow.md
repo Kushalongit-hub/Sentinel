@@ -171,3 +171,46 @@ flowchart TD
     Current --> Freshness[Detect stale imported evidence]
     Freshness --> UI
 ```
+
+## Retained JSON artifact descriptors
+
+`sentinel audit-workflow artifacts <revision-id> --project <repository>` returns
+four metadata descriptors for the retained run metadata, coverage ledger, findings
+and verification records. Obtain a revision ID with `audit-workflow history`.
+The command is repository-bound and accepts a 64-character hexadecimal revision ID.
+
+Each descriptor records schema version, revision, logical filename, JSON media type,
+serialization encoding, SHA-256 content identity, byte size, source snapshot and
+`validated-import-attestation` provenance. Hashes and sizes describe Sentinel's
+normalized JSON serialization, **not original file bytes**. Descriptors for new
+imports are committed atomically with the revision in SQLite schema v7. Schema v6
+upgrades preserve revisions; old descriptors are derived from retained payloads
+without requiring the original audit directory. Stored descriptors are checked
+against their retained payload before being returned.
+
+These descriptors do not fetch or execute referenced files, preserve arbitrary
+reproduction artifacts, authenticate reviewers, or establish observed execution.
+`execution_observed` is always false for these imported records. Source freshness
+must be checked separately. General reproduction artifact intake and containment
+remain roadmap work.
+
+Once a database upgrades to v7, older v6 binaries reject it; use the updated build.
+
+## Recover the latest legacy compatibility record
+
+```powershell
+sentinel audit-workflow export-legacy . --output C:\audit-runs\recovered
+sentinel audit-workflow validate . --run C:\audit-runs\recovered
+sentinel audit-workflow import . --run C:\audit-runs\recovered
+```
+
+The output parent must already exist; the run directory must be new and outside
+the target repository. Export reads only the latest `audit-workflow.latest.v1`
+compatibility record, preserving its metadata and evidence. It does not claim
+validation, update history, alter the legacy memory value, or manufacture provenance.
+The compatibility record can also have been written by a recent normalized import.
+Records exceeding the 2 MiB bound or belonging to another repository are rejected.
+Normal validation/import rejects stale source and unsupported schema/provenance.
+A stale recovery should be retained as historical evidence and a new audit started;
+do not replace its snapshot identity to force validation. Historical per-run memory
+keys are not batch migrated by this command.

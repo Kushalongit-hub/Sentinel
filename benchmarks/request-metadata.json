@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "label_status": "Author-labelled request header/cookie source shapes; not framework routing coverage or independent evaluation",
+  "cases": [
+    {
+      "id": "express-header-positive",
+      "family": "express-header",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "function route(req) { return db.query('SELECT ' + req.headers['x-query']); }\n"
+      },
+      "rationale": "Conventional request field reaches SQL text"
+    },
+    {
+      "id": "express-header-safe",
+      "family": "express-header",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "function route(req) { return db.query('SELECT ?', [req.headers['x-query']]); }\n"
+      },
+      "rationale": "Request value passed separately as query parameter"
+    },
+    {
+      "id": "express-cookie-positive",
+      "family": "express-cookie",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "function route(req) { return db.query('SELECT ' + req.cookies.query); }\n"
+      },
+      "rationale": "Conventional request field reaches SQL text"
+    },
+    {
+      "id": "express-cookie-safe",
+      "family": "express-cookie",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.js",
+      "files": {
+        "routes.js": "function route(req) { return db.query('SELECT ?', [req.cookies.query]); }\n"
+      },
+      "rationale": "Request value passed separately as query parameter"
+    },
+    {
+      "id": "starlette-header-positive",
+      "family": "starlette-header",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "def route(request):\n    cursor.execute('SELECT ' + request.headers['x-query'])\n"
+      },
+      "rationale": "Conventional request field reaches SQL text"
+    },
+    {
+      "id": "starlette-header-safe",
+      "family": "starlette-header",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "def route(request):\n    cursor.execute('SELECT ?', (request.headers['x-query'],))\n"
+      },
+      "rationale": "Request value passed separately as query parameter"
+    },
+    {
+      "id": "starlette-cookie-positive",
+      "family": "starlette-cookie",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": true,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "def route(request):\n    cursor.execute('SELECT ' + request.cookies['query'])\n"
+      },
+      "rationale": "Conventional request field reaches SQL text"
+    },
+    {
+      "id": "starlette-cookie-safe",
+      "family": "starlette-cookie",
+      "split": "development",
+      "class": "sql-injection",
+      "positive": false,
+      "rules": [
+        "interproc-sql-injection"
+      ],
+      "engine": "graph",
+      "entrypoint": "routes.py",
+      "files": {
+        "routes.py": "def route(request):\n    cursor.execute('SELECT ?', (request.cookies['query'],))\n"
+      },
+      "rationale": "Request value passed separately as query parameter"
+    }
+  ]
+}
