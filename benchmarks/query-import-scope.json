@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled Python module import scope development cases; not independently adjudicated or held out",
+  "cases": [
+    {
+      "id": "module-helper-with-method-collision",
+      "family": "python-import-symbol-scope",
+      "class": "import-symbol-scope",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "symbol_names": "qualified",
+      "files": {
+        "routes.py": "from service import helper as run\ndef handler(value):\n    return run(value)\n",
+        "service.py": "def helper(value):\n    return value\n\nclass Tools:\n    def helper(self, value):\n        return value\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "service.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "run",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            [
+              "service.py",
+              "helper"
+            ],
+            "run",
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "method-is-not-a-module-export",
+      "family": "python-import-symbol-scope",
+      "class": "import-symbol-scope",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "symbol_names": "qualified",
+      "files": {
+        "routes.py": "from service import helper as run\ndef handler(value):\n    return run(value)\n",
+        "service.py": "class Tools:\n    def helper(self, value):\n        return value\n"
+      },
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "run",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            null,
+            "run",
+            false
+          ]
+        ]
+      }
+    }
+  ]
+}

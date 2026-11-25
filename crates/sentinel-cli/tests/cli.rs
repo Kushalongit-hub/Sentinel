@@ -67,6 +67,176 @@ fn report(output: &Output) -> serde_json::Value {
     })
 }
 #[test]
+fn index_rebuild_cli_is_explicit_and_keeps_partial_coverage_exit_status() {
+    let fixture = Fixture::new();
+    fixture.write("main.py", "def helper():\n    return 1\n");
+    assert!(fixture.run(&["index"]).status.success());
+    let db = rusqlite::Connection::open(fixture.0.join(".sentinel.db")).unwrap();
+    db.execute_batch("UPDATE files SET payload='invalid-cache'; INSERT INTO memory(key,value) VALUES('keep','history');").unwrap();
+    assert!(!fixture.run(&["index"]).status.success());
+    let rebuilt = fixture.run(&["index", "--rebuild"]);
+    assert!(
+        rebuilt.status.success(),
+        "{}",
+        String::from_utf8_lossy(&rebuilt.stderr)
+    );
+    let stats = report(&rebuilt);
+    assert_eq!(stats["changed_files"], 1);
+    assert_eq!(stats["unchanged_files"], 0);
+    assert_eq!(
+        db.query_row("SELECT value FROM memory WHERE key='keep'", [], |row| {
+            row.get::<_, String>(0)
+        })
+        .unwrap(),
+        "history"
+    );
+    fixture.write("main.py", "def broken(:\n");
+    let partial = fixture.run(&["index", ".", "--rebuild"]);
+    assert_eq!(partial.status.code(), Some(2));
+    assert_eq!(report(&partial)["complete"], false);
+}
+
+#[test]
+fn trace_cli_preserves_static_paths_provenance_budgets_and_safe_repairs() {
+    let fixture = Fixture::new();
+    fixture.write("routes.py", "from repository import insert\ndef handler(request):\n    value = request.args['name']\n    return insert(value)\n");
+    fixture.write(
+        "repository.py",
+        "def insert(value):\n    cursor.execute('SELECT ' + value)\n",
+    );
+    let out = fixture.run(&[
+        "trace",
+        "handler",
+        "--project",
+        ".",
+        "--sink",
+        "sql-injection",
+    ]);
+    assert_eq!(out.status.code(), Some(0));
+    let trace = report(&out);
+    assert_eq!(trace["complete"], true);
+    assert_eq!(trace["paths"].as_array().unwrap().len(), 1);
+    assert_eq!(trace["paths"][0]["source"]["location"]["file"], "routes.py");
+    assert_eq!(
+        trace["paths"][0]["sink"]["location"]["file"],
+        "repository.py"
+    );
+    assert_eq!(trace["paths"][0]["sink_type"], "sql-injection");
+    assert_eq!(trace["backend"]["name"], "sentinel-native");
+    assert_eq!(trace["source_snapshot"].as_str().unwrap().len(), 64);
+    let filtered = fixture.run(&["trace", "handler", "--sink", "command-injection"]);
+    assert_eq!(filtered.status.code(), Some(0));
+    assert!(report(&filtered)["paths"].as_array().unwrap().is_empty());
+    let bounded = fixture.run(&["trace", "handler", "--max-nodes-visited", "1"]);
+    assert_eq!(bounded.status.code(), Some(2));
+    let bounded = report(&bounded);
+    assert_eq!(bounded["complete"], false);
+    assert!(!bounded["coverage_notes"].as_array().unwrap().is_empty());
+    assert_eq!(bounded["source_snapshot"], trace["source_snapshot"]);
+    fixture.write(
+        "repository.py",
+        "def insert(value):\n    cursor.execute('SELECT ?', (value,))\n",
+    );
+    let repaired = fixture.run(&["trace", "handler"]);
+    assert_eq!(repaired.status.code(), Some(0));
+    let repaired = report(&repaired);
+    assert!(repaired["paths"].as_array().unwrap().is_empty());
+    assert_ne!(repaired["source_snapshot"], trace["source_snapshot"]);
+    for (flag, value) in [
+        ("--max-call-depth", "33"),
+        ("--max-paths", "0"),
+        ("--max-nodes-visited", "100001"),
+    ] {
+        let rejected = fixture.run(&["trace", "handler", flag, value]);
+        assert_eq!(rejected.status.code(), Some(2));
+        assert!(rejected.stdout.is_empty());
+    }
+    let missing = fixture.run(&["trace", "absent_handler"]);
+    assert_eq!(missing.status.code(), Some(2));
+    assert!(missing.stdout.is_empty());
+}
+
+#[test]
+fn named_graph_queries_preserve_direction_bounds_provenance_and_partial_scope() {
+    let fixture = Fixture::new();
+    fixture.write("service.py", "def helper(value):\n    return value\n");
+    fixture.write("routes.py", "from service import helper\ndef first():\n    return helper('one')\ndef second():\n    return helper('two')\ndef opaque():\n    return missing('three')\n");
+    let callers = fixture.run(&["callers", "helper", "--max-items", "1"]);
+    assert_eq!(callers.status.code(), Some(0));
+    let callers = report(&callers);
+    assert_eq!(callers["target"][0]["name"], "helper");
+    assert_eq!(callers["edges"].as_array().unwrap().len(), 1);
+    assert_eq!(callers["edges"][0]["resolved"], true);
+    assert_eq!(callers["omitted_count"], 1);
+    let caller = callers["symbols"][0]["name"].as_str().unwrap();
+    assert!(matches!(caller, "first" | "second"));
+    let callees = fixture.run(&["callees", caller, "--project", "."]);
+    assert_eq!(callees.status.code(), Some(0));
+    let callees = report(&callees);
+    assert_eq!(callees["symbols"][0]["name"], "helper");
+    assert_eq!(callees["source_snapshot"], callers["source_snapshot"]);
+    assert_eq!(callees["backend"], callers["backend"]);
+    assert_eq!(callees["edges"][0]["from"], callers["edges"][0]["from"]);
+    assert_eq!(callees["edges"][0]["to"], callers["edges"][0]["to"]);
+    let opaque = report(&fixture.run(&["callees", "opaque"]));
+    assert_eq!(opaque["edges"][0]["resolved"], false);
+    assert!(opaque["symbols"].as_array().unwrap().is_empty());
+    let symbols = fixture.run(&["symbols", "helper"]);
+    assert_eq!(symbols.status.code(), Some(0));
+    assert_eq!(
+        report(&symbols)["symbols"][0]["location"]["file"],
+        "service.py"
+    );
+    fixture.write("broken.py", "def broken(:\n");
+    for command in ["symbols", "callers", "callees"] {
+        let partial = fixture.run(&[command, "helper"]);
+        assert_eq!(partial.status.code(), Some(2));
+        let partial = report(&partial);
+        assert_eq!(partial["index_complete"], false);
+        assert!(!partial["coverage_notes"].as_array().unwrap().is_empty());
+        for limit in ["0", "201"] {
+            let rejected = fixture.run(&[command, "helper", "--max-items", limit]);
+            assert_eq!(rejected.status.code(), Some(2));
+            assert!(rejected.stdout.is_empty());
+        }
+    }
+}
+
+#[test]
+fn static_context_cli_keeps_provenance_omissions_and_partial_scope_explicit() {
+    let fixture = Fixture::new();
+    fixture.write(
+        "main.py",
+        "def helper():\n    return 1\n\ndef other():\n    return helper()\n",
+    );
+    let complete = fixture.run(&["context", "main.py", "--max-items", "1"]);
+    assert_eq!(complete.status.code(), Some(0));
+    let context = report(&complete);
+    assert_eq!(context["complete"], true);
+    assert_eq!(context["target_symbols"].as_array().unwrap().len(), 1);
+    assert_eq!(context["selected_items"].as_array().unwrap().len(), 1);
+    assert!(context["omitted_target_symbols"].as_u64().unwrap() > 0);
+    assert!(context["omitted_count"].as_u64().unwrap() > 0);
+    assert_eq!(context["backend"]["name"], "sentinel-native");
+    assert_eq!(context["source_snapshot"].as_str().unwrap().len(), 64);
+
+    fixture.write("broken.py", "def broken(:\n");
+    let partial = fixture.run(&["context", "helper", "--project", "."]);
+    assert_eq!(partial.status.code(), Some(2));
+    let partial = report(&partial);
+    assert_eq!(partial["complete"], false);
+    assert!(!partial["coverage_notes"].as_array().unwrap().is_empty());
+    // Invalid files have no indexed IR: scope completeness changes independently
+    // of the retained valid-source identity.
+    assert_eq!(partial["source_snapshot"], context["source_snapshot"]);
+    for limit in ["0", "201"] {
+        let rejected = fixture.run(&["context", "helper", "--max-items", limit]);
+        assert_eq!(rejected.status.code(), Some(2));
+        assert!(rejected.stdout.is_empty());
+    }
+}
+
+#[test]
 fn codebase_context_preview_is_provider_independent_and_has_no_database_side_effect() {
     let fixture = Fixture::new();
     fixture.write("main.rs", "fn main() {}\n");
@@ -175,6 +345,78 @@ fn single_file_audit_and_threshold_work() {
     assert!(f.0.join(".sentinel.db").is_file());
     assert!(!report(&out)["findings"].as_array().unwrap().is_empty());
 }
+
+#[test]
+fn audit_reports_provider_secret_candidates_without_echoing_tokens() {
+    let f = Fixture::new();
+    let candidates = [
+        "AKIA7Q5N2M4R8D3T6V1C",
+        "ghp_4Qm7Zp2Vx9Kc5Nw8Rt3Yj6Ha1Bs4Df7G",
+        "AIzaSyD7xPq9Lm2Nv5Bc8Rk4Tz1Wh6Fg3Jd0Qa2",
+        "xoxb-4-1234567890-1234567890-abcdefghijklmnopqrstuv",
+        "npm_0123456789ABCDEF0123456789ABCDEF0123",
+    ];
+    let source = candidates
+        .iter()
+        .enumerate()
+        .map(|(index, candidate)| format!("const CREDENTIAL_{index}: &str = \"{candidate}\";"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    f.write("credentials.rs", source.as_bytes());
+
+    let out = f.run(&["audit", ".", "--format", "json"]);
+    let serialized = String::from_utf8_lossy(&out.stdout);
+    let report = report(&out);
+    let findings = report["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), candidates.len());
+    assert!(findings
+        .iter()
+        .all(|finding| finding["category"] == "secret-candidate"));
+    for candidate in candidates {
+        assert!(!serialized.contains(candidate));
+    }
+}
+
+#[test]
+fn deps_inventories_supported_npm_lockfiles_and_labels_gaps() {
+    let f = Fixture::new();
+    f.write(
+        "package-lock.json",
+        r#"{"name":"demo","lockfileVersion":3,"packages":{"":{"name":"demo","version":"1.0.0"},"node_modules/@scope/lib":{"version":"2.3.4","optional":true},"node_modules/app/node_modules/dep":{"version":"1.2.0","dev":true}}}"#,
+    );
+    let out = f.run(&["deps", "."]);
+    assert_eq!(out.status.code(), Some(0));
+    let inventory = report(&out);
+    assert_eq!(inventory["ecosystem"], "npm");
+    assert_eq!(inventory["lockfile_version"], 3);
+    assert_eq!(inventory["package_count"], 2);
+    assert!(inventory["complete"].as_bool().unwrap());
+    let packages = inventory["packages"].as_array().unwrap();
+    assert!(packages.iter().any(|package| {
+        package["name"] == "@scope/lib"
+            && package["version"] == "2.3.4"
+            && package["optional"].as_bool() == Some(true)
+    }));
+    assert!(packages.iter().any(|package| {
+        package["name"] == "dep"
+            && package["version"] == "1.2.0"
+            && package["development"].as_bool() == Some(true)
+    }));
+    assert!(inventory["coverage_notes"][0]
+        .as_str()
+        .unwrap()
+        .contains("no advisory database"));
+    assert!(!f.0.join(".sentinel.db").exists());
+
+    f.write(
+        "package-lock.json",
+        r#"{"lockfileVersion":1,"dependencies":{}}"#,
+    );
+    let unsupported = f.run(&["deps"]);
+    assert_eq!(unsupported.status.code(), Some(2));
+    assert_eq!(report(&unsupported)["complete"], false);
+}
+
 #[test]
 fn repeat_scans_resolve_and_reactivate_without_duplicates() {
     let f = Fixture::new();
@@ -385,7 +627,7 @@ fn mcp_stdio_indexes_traces_retrieves_and_rejects_scope_escape() {
     request("notifications/initialized", serde_json::json!({}));
     let tools = request("tools/list", serde_json::json!({}));
     assert!(
-        tools["result"]["tools"].as_array().unwrap().len() == 13,
+        tools["result"]["tools"].as_array().unwrap().len() == 15,
         "{tools}"
     );
     assert!(tools["result"]["tools"]
@@ -438,6 +680,66 @@ fn mcp_stdio_indexes_traces_retrieves_and_rejects_scope_escape() {
         indexed["result"]["structuredContent"]["files_indexed"], 3,
         "{indexed}"
     );
+    let audit_engine = sentinel_graph::Engine::open(&f.0).unwrap();
+    let external = Fixture::new();
+    let audit_run = external.0.join("audit-run");
+    audit_engine.init_audit_run(&audit_run, vec![]).unwrap();
+    audit_engine.import_audit_run(&audit_run).unwrap();
+    let revision = audit_engine.audit_history(1).unwrap().revisions[0]
+        .revision_id
+        .clone();
+    std::fs::remove_dir_all(&audit_run).unwrap();
+    let retained = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_get_audit_revision","arguments":{"revision_id":revision}}),
+    );
+    assert_eq!(
+        retained["result"]["structuredContent"]["revision_id"],
+        revision
+    );
+    assert_eq!(
+        retained["result"]["structuredContent"]["source_freshness_checked"],
+        false
+    );
+    assert_eq!(
+        retained["result"]["structuredContent"]["execution_observed"],
+        false
+    );
+    let artifacts = request(
+        "tools/call",
+        serde_json::json!({"name":"sentinel_get_audit_artifacts","arguments":{"revision_id":revision}}),
+    );
+    assert_eq!(
+        artifacts["result"]["structuredContent"]
+            .as_array()
+            .unwrap()
+            .len(),
+        4
+    );
+    for tool in [
+        "sentinel_get_audit_revision",
+        "sentinel_get_audit_artifacts",
+    ] {
+        for invalid in ["../outside".to_string(), "f".repeat(64)] {
+            let reply = request(
+                "tools/call",
+                serde_json::json!({"name":tool,"arguments":{"revision_id":invalid}}),
+            );
+            assert_eq!(reply["result"]["isError"], true, "{reply}");
+        }
+        let widened = request(
+            "tools/call",
+            serde_json::json!({"name":tool,"arguments":{"revision_id":revision,"repository":external.0}}),
+        );
+        assert!(
+            widened.get("error").is_some() || widened["result"]["isError"] == true,
+            "{widened}"
+        );
+    }
+    assert_eq!(
+        audit_engine.audit_history(1).unwrap().revisions[0].revision_id,
+        revision
+    );
     let context = request(
         "tools/call",
         serde_json::json!({"name":"sentinel_get_security_context","arguments":{"repository":".","target":"create_user","max_items":40}}),
@@ -458,6 +760,18 @@ fn mcp_stdio_indexes_traces_retrieves_and_rejects_scope_escape() {
         1,
         "{trace}"
     );
+    assert_eq!(
+        context["result"]["structuredContent"]["omitted_target_symbols"],
+        0
+    );
+    assert_eq!(
+        context["result"]["structuredContent"]["backend"],
+        trace["result"]["structuredContent"]["backend"]
+    );
+    assert_eq!(
+        context["result"]["structuredContent"]["source_snapshot"],
+        trace["result"]["structuredContent"]["source_snapshot"]
+    );
     let scan = request(
         "tools/call",
         serde_json::json!({"name":"sentinel_scan_file","arguments":{"path":"repository.py"}}),
@@ -472,6 +786,21 @@ fn mcp_stdio_indexes_traces_retrieves_and_rejects_scope_escape() {
     assert!(
         evidence["result"]["structuredContent"]["why"].is_string(),
         "{evidence}"
+    );
+    let provenance = &evidence["result"]["structuredContent"];
+    assert_eq!(
+        provenance["backend"],
+        trace["result"]["structuredContent"]["backend"]
+    );
+    assert_eq!(
+        provenance["source_snapshot"],
+        trace["result"]["structuredContent"]["source_snapshot"]
+    );
+    assert_eq!(provenance["index_complete"], true);
+    assert_eq!(provenance["excerpt_matches_graph"], true);
+    assert_eq!(
+        provenance["excerpt_content_hash"].as_str().unwrap().len(),
+        64
     );
     let outside = request(
         "tools/call",
@@ -505,6 +834,22 @@ fn mcp_stdio_indexes_traces_retrieves_and_rejects_scope_escape() {
         );
         assert!(
             result["result"]["structuredContent"]["symbols"].is_array(),
+            "{result}"
+        );
+        assert_eq!(
+            result["result"]["structuredContent"]["backend"]["name"],
+            "sentinel-native"
+        );
+        assert_eq!(
+            result["result"]["structuredContent"]["source_snapshot"],
+            trace["result"]["structuredContent"]["source_snapshot"]
+        );
+        assert!(
+            result["result"]["structuredContent"]["index_complete"].is_boolean(),
+            "{result}"
+        );
+        assert!(
+            result["result"]["structuredContent"]["coverage_notes"].is_array(),
             "{result}"
         );
     }
@@ -574,7 +919,7 @@ fn rules_list_actual_catalog_without_creating_database() {
     let f = Fixture::new();
     let out = f.run(&["rules"]);
     assert!(out.status.success());
-    assert_eq!(String::from_utf8_lossy(&out.stdout).lines().count(), 22);
+    assert_eq!(String::from_utf8_lossy(&out.stdout).lines().count(), 27);
     assert!(!f.0.join(".sentinel.db").exists());
 }
 #[test]
@@ -772,4 +1117,75 @@ fn user_env_supplies_cloud_credentials_outside_project_without_secret_output() {
     assert!(!String::from_utf8_lossy(&out.stdout).contains("fixture-private-key"));
     assert!(!String::from_utf8_lossy(&out.stderr).contains("fixture-private-key"));
     assert!(!f.0.join(".sentinel.db").exists());
+}
+
+#[test]
+fn audit_revision_cli_reads_retained_content_without_promoting_it() {
+    let f = Fixture::new();
+    f.write("app.py", "value = 1\n");
+    let e = sentinel_graph::Engine::open(&f.0).unwrap();
+    let external = Fixture::new();
+    let run = external.0.join("run");
+    e.init_audit_run(&run, vec![]).unwrap();
+    e.import_audit_run(&run).unwrap();
+    let revision = e.audit_history(1).unwrap().revisions[0].revision_id.clone();
+    f.write("app.py", "value = 2\n");
+    let out = f.run(&["audit-workflow", "revision", &revision]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(value["revision_id"], revision);
+    assert_eq!(value["source_freshness_checked"], false);
+    assert_eq!(value["execution_observed"], false);
+    assert_eq!(value["run"]["metadata"]["run_status"], "in_progress");
+    assert_eq!(
+        e.audit_history(1).unwrap().revisions[0].revision_id,
+        revision
+    );
+    assert!(!external
+        .run(&["audit-workflow", "revision", &revision])
+        .status
+        .success());
+}
+
+#[test]
+fn job_cli_pending_batch_and_cancellation_retain_existing_budgets() {
+    let f = Fixture::new();
+    f.write("a.py", "value = 1\n");
+    f.write("b.py", "value = 2\n");
+    let created = f.run(&[
+        "job",
+        "create",
+        ".",
+        "--max-attempts",
+        "2",
+        "--max-seconds",
+        "60",
+    ]);
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let job: serde_json::Value = serde_json::from_slice(&created.stdout).unwrap();
+    let id = job["id"].as_str().unwrap();
+    let partial = f.run(&["job", "resume", id, "--max-units", "1"]);
+    assert_eq!(partial.status.code(), Some(2));
+    let value: serde_json::Value = serde_json::from_slice(&partial.stdout).unwrap();
+    assert_eq!(value["state"], "pending");
+    assert_eq!(value["attempts_reserved"], 1);
+    assert_eq!(value["max_attempts"], 2);
+    assert_eq!(value["max_elapsed_ms"], 60000);
+    assert_eq!(value["results"].as_array().unwrap().len(), 1);
+    let cancelled = f.run(&["job", "cancel", id]);
+    assert!(cancelled.status.success());
+    let terminal = f.run(&["job", "resume", id, "--max-units", "1"]);
+    assert_eq!(terminal.status.code(), Some(2));
+    let value: serde_json::Value = serde_json::from_slice(&terminal.stdout).unwrap();
+    assert_eq!(value["state"], "cancelled");
+    assert_eq!(value["attempts_reserved"], 1);
+    assert_eq!(value["results"].as_array().unwrap().len(), 1);
 }

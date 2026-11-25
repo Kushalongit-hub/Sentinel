@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled lexical import statement questions in the existing Python import development family; not independently reviewed or held out",
+  "cases": [
+    {
+      "id": "function-import-does-not-leak-to-sibling",
+      "family": "python-import-symbol-scope",
+      "class": "python-import-statement-scope",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "symbol_names": "qualified",
+      "files": {
+        "service.py": "def helper(value):\n    return value\n",
+        "other.py": "def helper(value):\n    return 0\n",
+        "routes.py": "def loader():\n    from service import helper\n    return helper(0)\ndef handler(value):\n    return helper(value)\n"
+      },
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            null,
+            "helper",
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "id": "class-import-is-not-a-method-closure",
+      "family": "python-import-symbol-scope",
+      "class": "python-import-statement-scope",
+      "split": "development",
+      "command": "callees",
+      "target": "Worker.run",
+      "symbol_names": "qualified",
+      "files": {
+        "service.py": "def helper(value):\n    return value\n",
+        "other.py": "def helper(value):\n    return 0\n",
+        "routes.py": "class Worker:\n    from service import helper\n    def run(self, value):\n        return helper(value)\n"
+      },
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "Worker.run"
+            ],
+            null,
+            "helper",
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "id": "nearest-function-import-shadows-module-import",
+      "family": "python-import-symbol-scope",
+      "class": "python-import-statement-scope",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "symbol_names": "qualified",
+      "files": {
+        "service.py": "def helper(value):\n    return value\n",
+        "other.py": "def helper(value):\n    return 0\n",
+        "routes.py": "from service import helper\ndef handler(value):\n    from other import helper\n    return helper(value)\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "other.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            [
+              "other.py",
+              "helper"
+            ],
+            "helper",
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "nested-function-inherits-local-import",
+      "family": "python-import-symbol-scope",
+      "class": "python-import-statement-scope",
+      "split": "development",
+      "command": "callees",
+      "target": "outer.handler",
+      "symbol_names": "qualified",
+      "files": {
+        "service.py": "def helper(value):\n    return value\n",
+        "other.py": "def helper(value):\n    return 0\n",
+        "routes.py": "def outer():\n    from service import helper\n    def handler(value):\n        return helper(value)\n    return 0\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "service.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "outer.handler"
+            ],
+            [
+              "service.py",
+              "helper"
+            ],
+            "helper",
+            true
+          ]
+        ]
+      }
+    }
+  ]
+}

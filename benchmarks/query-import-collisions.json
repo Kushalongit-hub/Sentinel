@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled import collision questions in the existing Python import development family; not independent or held out",
+  "cases": [
+    {
+      "id": "import-survives-unrelated-class-method",
+      "family": "python-import-symbol-scope",
+      "class": "python-import-lexical-collision",
+      "split": "development",
+      "command": "callees",
+      "target": "Worker.run",
+      "symbol_names": "qualified",
+      "files": {
+        "service.py": "def helper(value):\n    return value\n",
+        "routes.py": "from service import helper\nclass Worker:\n    def helper(self, value):\n        return value\n    def run(self, value):\n        return helper(value)\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "service.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "Worker.run"
+            ],
+            [
+              "service.py",
+              "helper"
+            ],
+            "helper",
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "import-survives-unrelated-nested-function",
+      "family": "python-import-symbol-scope",
+      "class": "python-import-lexical-collision",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "symbol_names": "qualified",
+      "files": {
+        "service.py": "def helper(value):\n    return value\n",
+        "routes.py": "from service import helper\ndef unrelated():\n    def helper(value):\n        return value\n    return 0\ndef handler(value):\n    return helper(value)\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "service.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            [
+              "service.py",
+              "helper"
+            ],
+            "helper",
+            true
+          ]
+        ]
+      }
+    }
+  ]
+}

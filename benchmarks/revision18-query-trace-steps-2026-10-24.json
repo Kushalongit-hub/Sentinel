@@ -1,0 +1,310 @@
+{
+  "schema_version": 1,
+  "binary_sha256": "5c21e41a0123329bebe6e28c39cd6f7c2af90eb2539b22f421e56ec4d9d0c9a1",
+  "binary_sha256_after": "5c21e41a0123329bebe6e28c39cd6f7c2af90eb2539b22f421e56ec4d9d0c9a1",
+  "corpus_sha256": "d878f1cb88dbb419ecc26fee6457019e0c07b0ca57c01e7896029e75d2c4fdd6",
+  "measurement_valid": true,
+  "measurement_errors": [],
+  "label_status": "author-labelled development trace endpoint pair, related to existing flow fixtures; not independently reviewed or held out; ordered-step extension of the same two questions, not additional independent cases",
+  "split": "development",
+  "scope": "Exact file/name or opted-in qualified-name symbol multisets and call-name/resolution multisets, with endpoint direction when explicitly labelled. Trace cases score sink category and directed file/line/qualified-symbol endpoints, plus ordered steps when opted in. No operation-text, confidence, type, guard or AI scoring. Labels require independent review.",
+  "summary": {
+    "total": 2,
+    "complete": 2,
+    "correct": 2,
+    "incorrect": 0,
+    "failed_or_partial": 0,
+    "complete_accuracy": {
+      "value": 1.0,
+      "wilson_95": [
+        0.34238022750665303,
+        1.0
+      ],
+      "denominator": 2
+    },
+    "correct_response_rate": {
+      "value": 1.0,
+      "wilson_95": [
+        0.34238022750665303,
+        1.0
+      ],
+      "denominator": 2
+    }
+  },
+  "per_class": {
+    "trace-endpoints": {
+      "total": 2,
+      "complete": 2,
+      "correct": 2,
+      "incorrect": 0,
+      "failed_or_partial": 0,
+      "complete_accuracy": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "correct_response_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      }
+    }
+  },
+  "per_split": {
+    "development": {
+      "total": 2,
+      "complete": 2,
+      "correct": 2,
+      "incorrect": 0,
+      "failed_or_partial": 0,
+      "complete_accuracy": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "correct_response_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "cross-file-sql-trace",
+      "family": "python-cross-file-sql-trace-pair",
+      "class": "trace-endpoints",
+      "split": "development",
+      "command": "trace",
+      "target": "handler",
+      "status": "complete",
+      "source_sha256": "58f10b43705649d2c4a9623e188c780be5247843caf670c0d0fca61e69582985",
+      "expected": {
+        "paths": [
+          [
+            "sql-injection",
+            [
+              "routes.py",
+              3,
+              "handler"
+            ],
+            [
+              "repository.py",
+              2,
+              "insert_user"
+            ],
+            [
+              [
+                "routes.py",
+                3,
+                "handler"
+              ],
+              [
+                "service.py",
+                2,
+                "create_user"
+              ],
+              [
+                "repository.py",
+                1,
+                "insert_user"
+              ],
+              [
+                "repository.py",
+                2,
+                "insert_user"
+              ]
+            ]
+          ]
+        ]
+      },
+      "symbol_names": "qualified",
+      "trace_limits": {
+        "max_paths": 200,
+        "max_call_depth": 8,
+        "max_nodes_visited": 10000
+      },
+      "trace_steps": true,
+      "expected_source_snapshot": "0d951b7eda4956a7a8428c80e172fe0332cba78499ffb868b4952308759a7864",
+      "exit_code": 0,
+      "query": {
+        "backend": {
+          "name": "sentinel-native",
+          "version": "0.1.0",
+          "semantics_revision": 18
+        },
+        "source_snapshot": "0d951b7eda4956a7a8428c80e172fe0332cba78499ffb868b4952308759a7864",
+        "paths": [
+          {
+            "id": "84343497c2d602ceec887e65eebeca399e9cf6a5d3e0077ced465de5501fb7b2",
+            "source": {
+              "symbol": "handler",
+              "symbol_id": "5c7afb26fb6bf71c681657e142f18c6c34ddb216484bdc8231a4121cda4ce131",
+              "location": {
+                "file": "routes.py",
+                "start_line": 3,
+                "end_line": 3
+              },
+              "operation": "request.args['name']"
+            },
+            "path": [
+              {
+                "symbol": "handler",
+                "symbol_id": "5c7afb26fb6bf71c681657e142f18c6c34ddb216484bdc8231a4121cda4ce131",
+                "location": {
+                  "file": "routes.py",
+                  "start_line": 3,
+                  "end_line": 3
+                },
+                "operation": "request.args['name']"
+              },
+              {
+                "symbol": "create_user",
+                "symbol_id": "5e08ef673381e7d414146fd187ed7b9ce6cdcbcd105303d214d1c737a06c3fbb",
+                "location": {
+                  "file": "service.py",
+                  "start_line": 2,
+                  "end_line": 2
+                },
+                "operation": "call create_user"
+              },
+              {
+                "symbol": "insert_user",
+                "symbol_id": "07e2121a8b8095678afbaae1618657df0aca0940a598f8349db03fe87a48aa12",
+                "location": {
+                  "file": "repository.py",
+                  "start_line": 1,
+                  "end_line": 1
+                },
+                "operation": "call insert_user"
+              },
+              {
+                "symbol": "insert_user",
+                "symbol_id": "07e2121a8b8095678afbaae1618657df0aca0940a598f8349db03fe87a48aa12",
+                "location": {
+                  "file": "repository.py",
+                  "start_line": 2,
+                  "end_line": 2
+                },
+                "operation": "cursor.execute"
+              }
+            ],
+            "sink": {
+              "symbol": "insert_user",
+              "symbol_id": "07e2121a8b8095678afbaae1618657df0aca0940a598f8349db03fe87a48aa12",
+              "location": {
+                "file": "repository.py",
+                "start_line": 2,
+                "end_line": 2
+              },
+              "operation": "cursor.execute"
+            },
+            "sink_type": "sql-injection",
+            "sanitizers": [],
+            "security_guards": [],
+            "confidence": "medium",
+            "evidence": "AST-derived input request.args['name'] flows through parameter/return assignments to cursor.execute (sql-injection) at repository.py:2. No recognized category-specific sanitizer blocks this value. Call/API identity is syntactic, and guard annotations do not prove protection.",
+            "remediation_hint": "Use a constant SQL statement with bound parameters; do not interpolate untrusted query text."
+          }
+        ],
+        "nodes_visited": 26,
+        "duration_ms": 0,
+        "complete": true,
+        "coverage_notes": []
+      },
+      "actual": {
+        "paths": [
+          [
+            "sql-injection",
+            [
+              "routes.py",
+              3,
+              "handler"
+            ],
+            [
+              "repository.py",
+              2,
+              "insert_user"
+            ],
+            [
+              [
+                "routes.py",
+                3,
+                "handler"
+              ],
+              [
+                "service.py",
+                2,
+                "create_user"
+              ],
+              [
+                "repository.py",
+                1,
+                "insert_user"
+              ],
+              [
+                "repository.py",
+                2,
+                "insert_user"
+              ]
+            ]
+          ]
+        ]
+      },
+      "correct": true,
+      "elapsed_ms": 211.62610000101267
+    },
+    {
+      "id": "parameterized-sql-trace",
+      "family": "python-cross-file-sql-trace-pair",
+      "class": "trace-endpoints",
+      "split": "development",
+      "command": "trace",
+      "target": "handler",
+      "status": "complete",
+      "source_sha256": "ab00d2bd671a19015e3b212d968771f5f8cd92bc0f08ed1f325686f468fd44c7",
+      "expected": {
+        "paths": []
+      },
+      "symbol_names": "qualified",
+      "trace_limits": {
+        "max_paths": 200,
+        "max_call_depth": 8,
+        "max_nodes_visited": 10000
+      },
+      "trace_steps": true,
+      "expected_source_snapshot": "4f51ac69acda636fb06d6f436ff6e7d900c8a22c933d6ad8dd2e46cca181d6c9",
+      "exit_code": 0,
+      "query": {
+        "backend": {
+          "name": "sentinel-native",
+          "version": "0.1.0",
+          "semantics_revision": 18
+        },
+        "source_snapshot": "4f51ac69acda636fb06d6f436ff6e7d900c8a22c933d6ad8dd2e46cca181d6c9",
+        "paths": [],
+        "nodes_visited": 26,
+        "duration_ms": 0,
+        "complete": true,
+        "coverage_notes": []
+      },
+      "actual": {
+        "paths": []
+      },
+      "correct": true,
+      "elapsed_ms": 264.907899998434
+    }
+  ]
+}

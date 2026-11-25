@@ -1,0 +1,492 @@
+{
+  "schema_version": 1,
+  "binary_sha256": "2aaeea32df1efcf4f9bf70dc24a3a9ebefb01bbe2cf0f5266f1de9bbd9249898",
+  "binary_sha256_after": "2aaeea32df1efcf4f9bf70dc24a3a9ebefb01bbe2cf0f5266f1de9bbd9249898",
+  "corpus_sha256": "33fca4ca4a2ea82a05da19e13af1df13c1a70142bd085e3a730608acdff03738",
+  "measurement_valid": true,
+  "measurement_errors": [],
+  "label_status": "author-labelled Python import boundaries from the existing import-scope development family; not independently reviewed or held out",
+  "split": "development",
+  "scope": "Exact file/name or opted-in qualified-name symbol multisets and call-name/resolution multisets, with endpoint direction when explicitly labelled. Trace cases score sink category and directed file/line/qualified-symbol endpoints, plus ordered steps when opted in. No operation-text, confidence, type, guard or AI scoring. Labels require independent review.",
+  "summary": {
+    "total": 4,
+    "complete": 4,
+    "correct": 4,
+    "incorrect": 0,
+    "failed_or_partial": 0,
+    "complete_accuracy": {
+      "value": 1.0,
+      "wilson_95": [
+        0.5101091635454027,
+        1.0
+      ],
+      "denominator": 4
+    },
+    "correct_response_rate": {
+      "value": 1.0,
+      "wilson_95": [
+        0.5101091635454027,
+        1.0
+      ],
+      "denominator": 4
+    }
+  },
+  "per_class": {
+    "import-attribute-boundaries": {
+      "total": 4,
+      "complete": 4,
+      "correct": 4,
+      "incorrect": 0,
+      "failed_or_partial": 0,
+      "complete_accuracy": {
+        "value": 1.0,
+        "wilson_95": [
+          0.5101091635454027,
+          1.0
+        ],
+        "denominator": 4
+      },
+      "correct_response_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.5101091635454027,
+          1.0
+        ],
+        "denominator": 4
+      }
+    }
+  },
+  "per_split": {
+    "development": {
+      "total": 4,
+      "complete": 4,
+      "correct": 4,
+      "incorrect": 0,
+      "failed_or_partial": 0,
+      "complete_accuracy": {
+        "value": 1.0,
+        "wilson_95": [
+          0.5101091635454027,
+          1.0
+        ],
+        "denominator": 4
+      },
+      "correct_response_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.5101091635454027,
+          1.0
+        ],
+        "denominator": 4
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "namespace-module-helper",
+      "family": "python-import-symbol-scope",
+      "class": "import-attribute-boundaries",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "status": "complete",
+      "source_sha256": "95779cee8b5000d6ab3c181c9b6f4c0dde9ba5ddad65ca17694ddb8669e56ab1",
+      "expected": {
+        "symbols": [
+          [
+            "service.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "lib.helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            [
+              "service.py",
+              "helper"
+            ],
+            "lib.helper",
+            true
+          ]
+        ]
+      },
+      "symbol_names": "qualified",
+      "expected_source_snapshot": "6f03ced525a29ab58f80d3bb6b01fc62fdb1c1d582e756004b0bb3ea3c1a6dad",
+      "exit_code": 0,
+      "query": {
+        "backend": {
+          "name": "sentinel-native",
+          "version": "0.1.0",
+          "semantics_revision": 16
+        },
+        "source_snapshot": "6f03ced525a29ab58f80d3bb6b01fc62fdb1c1d582e756004b0bb3ea3c1a6dad",
+        "index_complete": true,
+        "coverage_notes": [],
+        "target": [
+          {
+            "id": "ec48e400b77b6e9240ca279e17340cd09a73b452ea7c2cc1121a86133cb1f922",
+            "name": "handler",
+            "qualified_name": "handler",
+            "kind": "function",
+            "location": {
+              "file": "routes.py",
+              "start_line": 2,
+              "end_line": 3
+            },
+            "language": "python",
+            "content_hash": "17f75f5a41e5921672e82e5e2ae1e9af68958f99059ae1115b915a32d8ff4739"
+          }
+        ],
+        "symbols": [
+          {
+            "id": "5f2bd26a42a60e47a7d8419412d2cf509353336594fccaf7c0ade642db7ef11b",
+            "name": "helper",
+            "qualified_name": "helper",
+            "kind": "function",
+            "location": {
+              "file": "service.py",
+              "start_line": 1,
+              "end_line": 2
+            },
+            "language": "python",
+            "content_hash": "5a77f8e8b15eec1b69f3c7edcef3ee5a9dbc6647163bc530406f49c72a045ab3"
+          }
+        ],
+        "edges": [
+          {
+            "from": "ec48e400b77b6e9240ca279e17340cd09a73b452ea7c2cc1121a86133cb1f922",
+            "to": "5f2bd26a42a60e47a7d8419412d2cf509353336594fccaf7c0ade642db7ef11b",
+            "kind": "CALLS",
+            "file": "routes.py",
+            "line": 3,
+            "name": "lib.helper",
+            "resolved": true
+          }
+        ],
+        "omitted_count": 0,
+        "duration_ms": 0
+      },
+      "actual": {
+        "symbols": [
+          [
+            "service.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "lib.helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            [
+              "service.py",
+              "helper"
+            ],
+            "lib.helper",
+            true
+          ]
+        ]
+      },
+      "correct": true,
+      "elapsed_ms": 127.16769997496158
+    },
+    {
+      "id": "namespace-method-is-not-module-export",
+      "family": "python-import-symbol-scope",
+      "class": "import-attribute-boundaries",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "status": "complete",
+      "source_sha256": "ede25c8fa8008517906777422c00e449e9dd29fafba5f623163f31feacf752ca",
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "lib.helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            null,
+            "lib.helper",
+            false
+          ]
+        ]
+      },
+      "symbol_names": "qualified",
+      "expected_source_snapshot": "06e83f55ad8b4995b37b2ff6d62faa7d70bd6a9887bcddad3ca14362155cf171",
+      "exit_code": 0,
+      "query": {
+        "backend": {
+          "name": "sentinel-native",
+          "version": "0.1.0",
+          "semantics_revision": 16
+        },
+        "source_snapshot": "06e83f55ad8b4995b37b2ff6d62faa7d70bd6a9887bcddad3ca14362155cf171",
+        "index_complete": true,
+        "coverage_notes": [],
+        "target": [
+          {
+            "id": "c87343a834cc0256db3d436130bedc8ceb1261ab7a8dcaaddb18ab6142892ec1",
+            "name": "handler",
+            "qualified_name": "handler",
+            "kind": "function",
+            "location": {
+              "file": "routes.py",
+              "start_line": 2,
+              "end_line": 3
+            },
+            "language": "python",
+            "content_hash": "17f75f5a41e5921672e82e5e2ae1e9af68958f99059ae1115b915a32d8ff4739"
+          }
+        ],
+        "symbols": [],
+        "edges": [
+          {
+            "from": "c87343a834cc0256db3d436130bedc8ceb1261ab7a8dcaaddb18ab6142892ec1",
+            "to": "unresolved:lib.helper",
+            "kind": "CALLS",
+            "file": "routes.py",
+            "line": 3,
+            "name": "lib.helper",
+            "resolved": false
+          }
+        ],
+        "omitted_count": 0,
+        "duration_ms": 0
+      },
+      "actual": {
+        "symbols": [],
+        "edges": [
+          [
+            "lib.helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            null,
+            "lib.helper",
+            false
+          ]
+        ]
+      },
+      "correct": true,
+      "elapsed_ms": 129.8215999850072
+    },
+    {
+      "id": "named-import-attribute-is-not-function-call",
+      "family": "python-import-symbol-scope",
+      "class": "import-attribute-boundaries",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "status": "complete",
+      "source_sha256": "10bc7f83dd52f5c7b3e2bd974bde1d000defe53e70c37bbb23aca661360bf643",
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "run.unrelated",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            null,
+            "run.unrelated",
+            false
+          ]
+        ]
+      },
+      "symbol_names": "qualified",
+      "expected_source_snapshot": "7d673a439371de6210be512e8b17ed2e67b11c34edd28bc5e33c417dfdf32f41",
+      "exit_code": 0,
+      "query": {
+        "backend": {
+          "name": "sentinel-native",
+          "version": "0.1.0",
+          "semantics_revision": 16
+        },
+        "source_snapshot": "7d673a439371de6210be512e8b17ed2e67b11c34edd28bc5e33c417dfdf32f41",
+        "index_complete": true,
+        "coverage_notes": [],
+        "target": [
+          {
+            "id": "1e0c264745f393434375c1d7b8209d5554636454cb86965975cc0511a24b7d9c",
+            "name": "handler",
+            "qualified_name": "handler",
+            "kind": "function",
+            "location": {
+              "file": "routes.py",
+              "start_line": 2,
+              "end_line": 3
+            },
+            "language": "python",
+            "content_hash": "378643e23d3126d1dbb85dbd2e29cceba2bcd9e663a0dc5a319518fb1eec2b67"
+          }
+        ],
+        "symbols": [],
+        "edges": [
+          {
+            "from": "1e0c264745f393434375c1d7b8209d5554636454cb86965975cc0511a24b7d9c",
+            "to": "unresolved:run.unrelated",
+            "kind": "CALLS",
+            "file": "routes.py",
+            "line": 3,
+            "name": "run.unrelated",
+            "resolved": false
+          }
+        ],
+        "omitted_count": 0,
+        "duration_ms": 0
+      },
+      "actual": {
+        "symbols": [],
+        "edges": [
+          [
+            "run.unrelated",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            null,
+            "run.unrelated",
+            false
+          ]
+        ]
+      },
+      "correct": true,
+      "elapsed_ms": 373.3009999850765
+    },
+    {
+      "id": "deep-namespace-chain-is-not-short-name-proof",
+      "family": "python-import-symbol-scope",
+      "class": "import-attribute-boundaries",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "status": "complete",
+      "source_sha256": "6d3c72733600a1e73b7a2b7d5a704a394bb7d9c223cfd2f52a70814c06661b9d",
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "lib.Tools.helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            null,
+            "lib.Tools.helper",
+            false
+          ]
+        ]
+      },
+      "symbol_names": "qualified",
+      "expected_source_snapshot": "2a0bff2e1e3a4a491d5beb57650f1eab81a0a1797a26416317215b411fa5b0fc",
+      "exit_code": 0,
+      "query": {
+        "backend": {
+          "name": "sentinel-native",
+          "version": "0.1.0",
+          "semantics_revision": 16
+        },
+        "source_snapshot": "2a0bff2e1e3a4a491d5beb57650f1eab81a0a1797a26416317215b411fa5b0fc",
+        "index_complete": true,
+        "coverage_notes": [],
+        "target": [
+          {
+            "id": "5e813f261ddaf725263de85b7913eb2f031f3f5d911b644eeedf26d59feac106",
+            "name": "handler",
+            "qualified_name": "handler",
+            "kind": "function",
+            "location": {
+              "file": "routes.py",
+              "start_line": 2,
+              "end_line": 3
+            },
+            "language": "python",
+            "content_hash": "bf2f742712f60bd2cecb5bdfa01872bb046d660d3cd3ccf7cf9da1ebbb2d6c8b"
+          }
+        ],
+        "symbols": [],
+        "edges": [
+          {
+            "from": "5e813f261ddaf725263de85b7913eb2f031f3f5d911b644eeedf26d59feac106",
+            "to": "unresolved:lib.Tools.helper",
+            "kind": "CALLS",
+            "file": "routes.py",
+            "line": 3,
+            "name": "lib.Tools.helper",
+            "resolved": false
+          }
+        ],
+        "omitted_count": 0,
+        "duration_ms": 1
+      },
+      "actual": {
+        "symbols": [],
+        "edges": [
+          [
+            "lib.Tools.helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            null,
+            "lib.Tools.helper",
+            false
+          ]
+        ]
+      },
+      "correct": true,
+      "elapsed_ms": 226.4529000094626
+    }
+  ]
+}

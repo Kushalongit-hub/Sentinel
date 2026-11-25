@@ -1,0 +1,318 @@
+{
+  "schema_version": 1,
+  "binary_sha256": "75c2468b35bc1753611c3afba531bea38e1f44d29734635f8516e7ad7e410814",
+  "binary_sha256_after": "75c2468b35bc1753611c3afba531bea38e1f44d29734635f8516e7ad7e410814",
+  "corpus_sha256": "c723cd886d01e7eed5e991ce5c22e7dfe4bc48d90756e20bf0eac7159d7667db",
+  "measurement_valid": true,
+  "measurement_errors": [],
+  "label_status": "author-labelled Python/JavaScript receiver-chain development questions; not independently reviewed or held out",
+  "split": "development",
+  "scope": "Exact file/name or opted-in qualified-name symbol multisets and call-name/resolution multisets, with endpoint direction when explicitly labelled. Trace cases score sink category and directed file/line/qualified-symbol endpoints, plus ordered steps when opted in. No operation-text, confidence, type, guard or AI scoring. Labels require independent review.",
+  "summary": {
+    "total": 2,
+    "complete": 2,
+    "correct": 0,
+    "incorrect": 2,
+    "failed_or_partial": 0,
+    "complete_accuracy": {
+      "value": 0.0,
+      "wilson_95": [
+        0.0,
+        0.6576197724933469
+      ],
+      "denominator": 2
+    },
+    "correct_response_rate": {
+      "value": 0.0,
+      "wilson_95": [
+        0.0,
+        0.6576197724933469
+      ],
+      "denominator": 2
+    }
+  },
+  "per_class": {
+    "receiver-chain-boundaries": {
+      "total": 2,
+      "complete": 2,
+      "correct": 0,
+      "incorrect": 2,
+      "failed_or_partial": 0,
+      "complete_accuracy": {
+        "value": 0.0,
+        "wilson_95": [
+          0.0,
+          0.6576197724933469
+        ],
+        "denominator": 2
+      },
+      "correct_response_rate": {
+        "value": 0.0,
+        "wilson_95": [
+          0.0,
+          0.6576197724933469
+        ],
+        "denominator": 2
+      }
+    }
+  },
+  "per_split": {
+    "development": {
+      "total": 2,
+      "complete": 2,
+      "correct": 0,
+      "incorrect": 2,
+      "failed_or_partial": 0,
+      "complete_accuracy": {
+        "value": 0.0,
+        "wilson_95": [
+          0.0,
+          0.6576197724933469
+        ],
+        "denominator": 2
+      },
+      "correct_response_rate": {
+        "value": 0.0,
+        "wilson_95": [
+          0.0,
+          0.6576197724933469
+        ],
+        "denominator": 2
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "python-receiver-chain-is-not-own-method",
+      "family": "receiver-attribute-chain-boundaries",
+      "class": "receiver-chain-boundaries",
+      "split": "development",
+      "command": "callees",
+      "target": "Worker.run",
+      "status": "complete",
+      "source_sha256": "5dbd0a5293c17066c981fb36eeb535c3841f1ea938357d9df208b5bcd3682498",
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "self.worker.helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "Worker.run"
+            ],
+            null,
+            "self.worker.helper",
+            false
+          ]
+        ]
+      },
+      "symbol_names": "qualified",
+      "expected_source_snapshot": "002428230a1995050bdc60ea4668203bc047106831a4acd474a75f5ffa4aeff1",
+      "exit_code": 0,
+      "query": {
+        "backend": {
+          "name": "sentinel-native",
+          "version": "0.1.0",
+          "semantics_revision": 13
+        },
+        "source_snapshot": "002428230a1995050bdc60ea4668203bc047106831a4acd474a75f5ffa4aeff1",
+        "index_complete": true,
+        "coverage_notes": [],
+        "target": [
+          {
+            "id": "fcf9a5d82a987a6224a11e3f5e83862f56e9adb870f94935789a6fa973e01b56",
+            "name": "run",
+            "qualified_name": "Worker.run",
+            "kind": "method",
+            "location": {
+              "file": "methods.py",
+              "start_line": 4,
+              "end_line": 5
+            },
+            "language": "python",
+            "content_hash": "67a51364e39451abf07f94b156a13a480b4c543684fef3cbe9cce9a67380fd24"
+          }
+        ],
+        "symbols": [
+          {
+            "id": "463bce9d3e2414de73466f54f8fe0ba3a83cef853d5f987a8b2fbd0adf0cf7da",
+            "name": "helper",
+            "qualified_name": "Worker.helper",
+            "kind": "method",
+            "location": {
+              "file": "methods.py",
+              "start_line": 2,
+              "end_line": 3
+            },
+            "language": "python",
+            "content_hash": "de3fa7e5a662f452ff69bfe06d4cc64778f599ad39c1aad5a24e2056780ce6f0"
+          }
+        ],
+        "edges": [
+          {
+            "from": "fcf9a5d82a987a6224a11e3f5e83862f56e9adb870f94935789a6fa973e01b56",
+            "to": "463bce9d3e2414de73466f54f8fe0ba3a83cef853d5f987a8b2fbd0adf0cf7da",
+            "kind": "CALLS",
+            "file": "methods.py",
+            "line": 5,
+            "name": "self.worker.helper",
+            "resolved": true
+          }
+        ],
+        "omitted_count": 0,
+        "duration_ms": 0
+      },
+      "actual": {
+        "symbols": [
+          [
+            "methods.py",
+            "Worker.helper"
+          ]
+        ],
+        "edges": [
+          [
+            "self.worker.helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "Worker.run"
+            ],
+            [
+              "methods.py",
+              "Worker.helper"
+            ],
+            "self.worker.helper",
+            true
+          ]
+        ]
+      },
+      "correct": false,
+      "elapsed_ms": 2548.9998999983072
+    },
+    {
+      "id": "javascript-receiver-chain-is-not-own-method",
+      "family": "receiver-attribute-chain-boundaries",
+      "class": "receiver-chain-boundaries",
+      "split": "development",
+      "command": "callees",
+      "target": "Worker.run",
+      "status": "complete",
+      "source_sha256": "57b08f840b03b76f3bf92a5600066c65c9673235907c310d2e4b2e82fd6adfab",
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "this.worker.helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.js",
+              "Worker.run"
+            ],
+            null,
+            "this.worker.helper",
+            false
+          ]
+        ]
+      },
+      "symbol_names": "qualified",
+      "expected_source_snapshot": "8c55d3f12d2bd63a96e27ba375fc4e59177f870b30cdcca7cda312b1a69b455d",
+      "exit_code": 0,
+      "query": {
+        "backend": {
+          "name": "sentinel-native",
+          "version": "0.1.0",
+          "semantics_revision": 13
+        },
+        "source_snapshot": "8c55d3f12d2bd63a96e27ba375fc4e59177f870b30cdcca7cda312b1a69b455d",
+        "index_complete": true,
+        "coverage_notes": [],
+        "target": [
+          {
+            "id": "da1483200b2fdf7873136b7193753b087725d2088f20c00a18efac068cda1b62",
+            "name": "run",
+            "qualified_name": "Worker.run",
+            "kind": "method",
+            "location": {
+              "file": "methods.js",
+              "start_line": 3,
+              "end_line": 3
+            },
+            "language": "javascript",
+            "content_hash": "0d75b84da24c4e141bb06f468b98af3883365824a7e0317fe752bd3ce43a5f8a"
+          }
+        ],
+        "symbols": [
+          {
+            "id": "c71fe4db326e25eb1b06b3e981df1abb49573ce2d560fb8be09ad55692f670a5",
+            "name": "helper",
+            "qualified_name": "Worker.helper",
+            "kind": "method",
+            "location": {
+              "file": "methods.js",
+              "start_line": 2,
+              "end_line": 2
+            },
+            "language": "javascript",
+            "content_hash": "155eb2faaa03a116d558b968c3e12e3a0cede939a94639f24750378855b12a24"
+          }
+        ],
+        "edges": [
+          {
+            "from": "da1483200b2fdf7873136b7193753b087725d2088f20c00a18efac068cda1b62",
+            "to": "c71fe4db326e25eb1b06b3e981df1abb49573ce2d560fb8be09ad55692f670a5",
+            "kind": "CALLS",
+            "file": "methods.js",
+            "line": 3,
+            "name": "this.worker.helper",
+            "resolved": true
+          }
+        ],
+        "omitted_count": 0,
+        "duration_ms": 0
+      },
+      "actual": {
+        "symbols": [
+          [
+            "methods.js",
+            "Worker.helper"
+          ]
+        ],
+        "edges": [
+          [
+            "this.worker.helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.js",
+              "Worker.run"
+            ],
+            [
+              "methods.js",
+              "Worker.helper"
+            ],
+            "this.worker.helper",
+            true
+          ]
+        ]
+      },
+      "correct": false,
+      "elapsed_ms": 96.69330000178888
+    }
+  ]
+}

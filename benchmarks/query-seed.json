@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled development seed; not independently reviewed or held out",
+  "cases": [
+    {
+      "id": "helper-callers",
+      "family": "python-direct-call-queries",
+      "class": "callers",
+      "split": "development",
+      "command": "callers",
+      "target": "helper",
+      "files": {
+        "service.py": "def helper(value):\n    return value\n",
+        "routes.py": "from service import helper\ndef first():\n    return helper('one')\ndef second():\n    return helper('two')\ndef opaque():\n    return missing('three')\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "routes.py",
+            "first"
+          ],
+          [
+            "routes.py",
+            "second"
+          ]
+        ],
+        "edges": [
+          [
+            "helper",
+            true
+          ],
+          [
+            "helper",
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "first-callees",
+      "family": "python-direct-call-queries",
+      "class": "callees",
+      "split": "development",
+      "command": "callees",
+      "target": "first",
+      "files": {
+        "service.py": "def helper(value):\n    return value\n",
+        "routes.py": "from service import helper\ndef first():\n    return helper('one')\ndef second():\n    return helper('two')\ndef opaque():\n    return missing('three')\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "service.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "helper",
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "opaque-callee",
+      "family": "python-direct-call-queries",
+      "class": "callees",
+      "split": "development",
+      "command": "callees",
+      "target": "opaque",
+      "files": {
+        "service.py": "def helper(value):\n    return value\n",
+        "routes.py": "from service import helper\ndef first():\n    return helper('one')\ndef second():\n    return helper('two')\ndef opaque():\n    return missing('three')\n"
+      },
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "missing",
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "id": "missing-symbol",
+      "family": "python-direct-call-queries",
+      "class": "symbols",
+      "split": "development",
+      "command": "symbols",
+      "target": "absent_symbol",
+      "files": {
+        "service.py": "def helper(value):\n    return value\n",
+        "routes.py": "from service import helper\ndef first():\n    return helper('one')\ndef second():\n    return helper('two')\ndef opaque():\n    return missing('three')\n"
+      },
+      "expected": {
+        "symbols": [],
+        "edges": []
+      }
+    }
+  ]
+}

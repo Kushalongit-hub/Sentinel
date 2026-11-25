@@ -1,0 +1,304 @@
+{
+  "schema_version": 1,
+  "binary_sha256": "379a4deebe1739ce41554b673fab21bf7a4262844e771b9cb75e3726db880ab9",
+  "binary_sha256_after": "379a4deebe1739ce41554b673fab21bf7a4262844e771b9cb75e3726db880ab9",
+  "measurement_valid": true,
+  "measurement_errors": [],
+  "requested_files": 1000,
+  "repeats": 3,
+  "cold_repeats": 3,
+  "timeout_seconds": 120,
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python_version": "3.12.14",
+  "fixture_sha256": "124cebdd9a630076c90bd7e7e03d4ba4fd23dbdb9b5cd6a057748072925bdf52",
+  "scope": "Synthetic independent Python modules; wall time includes startup and SQLite. Cold means fresh database, not cold OS caches. Nearest-rank percentiles use complete samples only; small samples are descriptive. No memory, cancellation or competitor measurement.",
+  "summary": {
+    "cold": {
+      "samples": 3,
+      "complete": 3,
+      "p50_ms": 2665.338199996768,
+      "p95_ms": 4575.262499998644
+    },
+    "warm": {
+      "samples": 3,
+      "complete": 3,
+      "p50_ms": 177.66730000221287,
+      "p95_ms": 205.71639999980107
+    },
+    "one_file_changed": {
+      "samples": 3,
+      "complete": 3,
+      "p50_ms": 226.77950000070268,
+      "p95_ms": 239.3776999997499
+    }
+  },
+  "samples": {
+    "cold": [
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "3b7f22b31df072ef721548bf1e214163dd43aa8979c2a4d4c26e7892c863bc28",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-jm3s1rdz\\cold_0",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1000,
+          "unchanged_files": 0,
+          "removed_files": 0,
+          "duration_ms": 4487,
+          "timings": {
+            "source_refresh_ms": 4310,
+            "source_read_ms": 4182,
+            "source_extract_ms": 102,
+            "relationship_analysis_ms": 19,
+            "persistence_ms": 156
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 4575.262499998644
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "818c091080ccd36c1aa132499b747f5dcb2fbd9def03a6c863fedfd27179859b",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-jm3s1rdz\\cold_1",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1000,
+          "unchanged_files": 0,
+          "removed_files": 0,
+          "duration_ms": 2362,
+          "timings": {
+            "source_refresh_ms": 2213,
+            "source_read_ms": 2103,
+            "source_extract_ms": 88,
+            "relationship_analysis_ms": 12,
+            "persistence_ms": 136
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 2409.5340999992914
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "6594e0a258a832cd919d234dfb1d801524b44d42ea30ce94db56b552edfcbddd",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-jm3s1rdz\\cold_2",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1000,
+          "unchanged_files": 0,
+          "removed_files": 0,
+          "duration_ms": 2624,
+          "timings": {
+            "source_refresh_ms": 2493,
+            "source_read_ms": 2374,
+            "source_extract_ms": 95,
+            "relationship_analysis_ms": 12,
+            "persistence_ms": 118
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 2665.338199996768
+      }
+    ],
+    "warm": [
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "6594e0a258a832cd919d234dfb1d801524b44d42ea30ce94db56b552edfcbddd",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-jm3s1rdz\\cold_2",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 0,
+          "unchanged_files": 1000,
+          "removed_files": 0,
+          "duration_ms": 156,
+          "timings": {
+            "source_refresh_ms": 103,
+            "source_read_ms": 66,
+            "source_extract_ms": 0,
+            "relationship_analysis_ms": 17,
+            "persistence_ms": 35
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 177.02780000036
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "6594e0a258a832cd919d234dfb1d801524b44d42ea30ce94db56b552edfcbddd",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-jm3s1rdz\\cold_2",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 0,
+          "unchanged_files": 1000,
+          "removed_files": 0,
+          "duration_ms": 181,
+          "timings": {
+            "source_refresh_ms": 128,
+            "source_read_ms": 92,
+            "source_extract_ms": 0,
+            "relationship_analysis_ms": 13,
+            "persistence_ms": 38
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 205.71639999980107
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "6594e0a258a832cd919d234dfb1d801524b44d42ea30ce94db56b552edfcbddd",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-jm3s1rdz\\cold_2",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 0,
+          "unchanged_files": 1000,
+          "removed_files": 0,
+          "duration_ms": 156,
+          "timings": {
+            "source_refresh_ms": 104,
+            "source_read_ms": 68,
+            "source_extract_ms": 0,
+            "relationship_analysis_ms": 15,
+            "persistence_ms": 35
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 177.66730000221287
+      }
+    ],
+    "one_file_changed": [
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "6594e0a258a832cd919d234dfb1d801524b44d42ea30ce94db56b552edfcbddd",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-jm3s1rdz\\cold_2",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1,
+          "unchanged_files": 999,
+          "removed_files": 0,
+          "duration_ms": 219,
+          "timings": {
+            "source_refresh_ms": 165,
+            "source_read_ms": 128,
+            "source_extract_ms": 0,
+            "relationship_analysis_ms": 13,
+            "persistence_ms": 39
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 239.3776999997499
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "6594e0a258a832cd919d234dfb1d801524b44d42ea30ce94db56b552edfcbddd",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-jm3s1rdz\\cold_2",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1,
+          "unchanged_files": 999,
+          "removed_files": 0,
+          "duration_ms": 196,
+          "timings": {
+            "source_refresh_ms": 140,
+            "source_read_ms": 102,
+            "source_extract_ms": 0,
+            "relationship_analysis_ms": 13,
+            "persistence_ms": 42
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 226.77950000070268
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "6594e0a258a832cd919d234dfb1d801524b44d42ea30ce94db56b552edfcbddd",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-jm3s1rdz\\cold_2",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1,
+          "unchanged_files": 999,
+          "removed_files": 0,
+          "duration_ms": 190,
+          "timings": {
+            "source_refresh_ms": 135,
+            "source_read_ms": 97,
+            "source_extract_ms": 0,
+            "relationship_analysis_ms": 14,
+            "persistence_ms": 40
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 209.5145000021148
+      }
+    ]
+  }
+}

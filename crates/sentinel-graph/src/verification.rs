@@ -12,6 +12,8 @@ use std::{
     time::Instant,
 };
 
+const BASELINE_LIMIT: usize = 16 * 1024 * 1024;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Verdict {
@@ -55,12 +57,10 @@ impl Engine {
                 .strip_prefix(&self.root)?
                 .to_string_lossy()
                 .replace('\\', "/");
-            match self.checked_path(&file).and_then(|p| {
-                if std::fs::metadata(&p)?.len() > 1024 * 1024 {
-                    anyhow::bail!("source exceeds 1 MiB");
-                }
-                Ok(std::fs::read_to_string(p)?)
-            }) {
+            match self
+                .checked_path(&file)
+                .and_then(|p| crate::read_source(&p))
+            {
                 Ok(source) => {
                     bytes += source.len();
                     if bytes > 16 * 1024 * 1024 {
@@ -90,8 +90,12 @@ impl Engine {
                 assessment.notes.join("; ")
             );
         }
+        let encoded = serde_json::to_string(&assessment)?;
+        if encoded.len() > BASELINE_LIMIT {
+            anyhow::bail!("baseline record exceeds 16 MiB");
+        }
         let tx = self.db.connection().unchecked_transaction()?;
-        tx.execute("INSERT INTO security_baselines(project_id,payload) VALUES (?1,?2) ON CONFLICT(project_id) DO UPDATE SET payload=excluded.payload,created_at=CURRENT_TIMESTAMP",params![self.project_id,serde_json::to_string(&assessment)?])?;
+        tx.execute("INSERT INTO security_baselines(project_id,payload) VALUES (?1,?2) ON CONFLICT(project_id) DO UPDATE SET payload=excluded.payload,created_at=CURRENT_TIMESTAMP",params![self.project_id,encoded])?;
         tx.execute(
             "UPDATE baseline_findings SET status='resolved' WHERE project_id=?1",
             [&self.project_id],
@@ -111,12 +115,12 @@ impl Engine {
     /// Compare with a saved baseline, or Git HEAD when absent. --base explicitly selects Git.
     pub fn verify_patch(&self, base: Option<&str>) -> Result<Verification> {
         let start = Instant::now();
-        let saved: Option<String> = if base.is_none() {
+        let saved: Option<Vec<u8>> = if base.is_none() {
             self.db
                 .connection()
                 .query_row(
-                    "SELECT payload FROM security_baselines WHERE project_id=?1",
-                    [&self.project_id],
+                    "SELECT substr(CAST(payload AS BLOB),1,?2) FROM security_baselines WHERE project_id=?1",
+                    params![self.project_id, BASELINE_LIMIT + 1],
                     |r| r.get(0),
                 )
                 .optional()?
@@ -125,7 +129,37 @@ impl Engine {
         };
         let mut regressed = vec![];
         let comparison = if let Some(saved) = saved {
-            let before: Assessed = serde_json::from_str(&saved)?;
+            if saved.len() > BASELINE_LIMIT {
+                anyhow::bail!("baseline record exceeds 16 MiB");
+            }
+            let before: Assessed = serde_json::from_slice(&saved)?;
+            if before.keys.len() != before.findings.len()
+                || before.snapshot.as_ref().is_some_and(|snapshot| {
+                    snapshot.id
+                        != sentinel_core::security::identity((
+                            &snapshot.rule_sources,
+                            &snapshot.graph_sources,
+                        ))
+                })
+            {
+                anyhow::bail!("invalid stored baseline contract");
+            }
+            if let (Some(snapshot), Some(detector)) = (&before.snapshot, &before.detector) {
+                if before.evidence.len() != before.findings.len()
+                    || before
+                        .evidence
+                        .iter()
+                        .zip(&before.findings)
+                        .any(|(evidence, finding)| {
+                            evidence.schema_version != 1
+                                || evidence.finding_id != finding.id
+                                || evidence.snapshot_id != snapshot.id
+                                || &evidence.detector != detector
+                        })
+                {
+                    anyhow::bail!("invalid stored baseline evidence contract");
+                }
+            }
             let (mut after, files) = self.assess_project()?;
             for finding in &before.findings {
                 let relative = finding

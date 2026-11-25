@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "binary_sha256": "5591aea9fc8c3b1e16190ca7c6fb676b635eafcdd97d4ec03177a5beab07cda3",
+  "binary_sha256_after": "5591aea9fc8c3b1e16190ca7c6fb676b635eafcdd97d4ec03177a5beab07cda3",
+  "measurement_valid": true,
+  "measurement_errors": [],
+  "requested_files": 1000,
+  "repeats": 3,
+  "timeout_seconds": 120,
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python_version": "3.12.14",
+  "fixture_sha256": "124cebdd9a630076c90bd7e7e03d4ba4fd23dbdb9b5cd6a057748072925bdf52",
+  "scope": "Synthetic independent Python modules; wall time includes startup and SQLite. Cold means fresh database, not cold OS caches. Nearest-rank percentiles use complete samples only; small samples are descriptive. No memory, cancellation or competitor measurement.",
+  "summary": {
+    "cold": {
+      "samples": 1,
+      "complete": 1,
+      "p50_ms": 13313.655900012236,
+      "p95_ms": 13313.655900012236
+    },
+    "warm": {
+      "samples": 3,
+      "complete": 3,
+      "p50_ms": 160.58039999916218,
+      "p95_ms": 161.4355999918189
+    },
+    "one_file_changed": {
+      "samples": 3,
+      "complete": 3,
+      "p50_ms": 172.32149999472313,
+      "p95_ms": 174.8758000030648
+    }
+  },
+  "samples": {
+    "cold": [
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "04575c41422c85f63898ca59fe338598c62552ab087ffa7849cc2936156d9faf",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-crpsnqpw",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1000,
+          "unchanged_files": 0,
+          "removed_files": 0,
+          "duration_ms": 12502,
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 13313.655900012236
+      }
+    ],
+    "warm": [
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "04575c41422c85f63898ca59fe338598c62552ab087ffa7849cc2936156d9faf",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-crpsnqpw",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 0,
+          "unchanged_files": 1000,
+          "removed_files": 0,
+          "duration_ms": 96,
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 161.4355999918189
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "04575c41422c85f63898ca59fe338598c62552ab087ffa7849cc2936156d9faf",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-crpsnqpw",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 0,
+          "unchanged_files": 1000,
+          "removed_files": 0,
+          "duration_ms": 91,
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 160.58039999916218
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "04575c41422c85f63898ca59fe338598c62552ab087ffa7849cc2936156d9faf",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-crpsnqpw",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 0,
+          "unchanged_files": 1000,
+          "removed_files": 0,
+          "duration_ms": 89,
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 154.49479999369942
+      }
+    ],
+    "one_file_changed": [
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "04575c41422c85f63898ca59fe338598c62552ab087ffa7849cc2936156d9faf",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-crpsnqpw",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1,
+          "unchanged_files": 999,
+          "removed_files": 0,
+          "duration_ms": 95,
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 163.25119999237359
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "04575c41422c85f63898ca59fe338598c62552ab087ffa7849cc2936156d9faf",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-crpsnqpw",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1,
+          "unchanged_files": 999,
+          "removed_files": 0,
+          "duration_ms": 106,
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 174.8758000030648
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "04575c41422c85f63898ca59fe338598c62552ab087ffa7849cc2936156d9faf",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-crpsnqpw",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1,
+          "unchanged_files": 999,
+          "removed_files": 0,
+          "duration_ms": 101,
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 172.32149999472313
+      }
+    ]
+  }
+}

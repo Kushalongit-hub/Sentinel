@@ -4,7 +4,10 @@ use anyhow::{bail, Context, Result};
 use rusqlite::params;
 use sentinel_core::{security::identity, ScanOutcome};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, time::Instant};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Instant,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -87,7 +90,7 @@ impl Engine {
         }
         let tx = self.db.connection().unchecked_transaction()?;
         let rows = {
-            let mut stmt = tx.prepare("SELECT job_id,created_at FROM security_jobs WHERE project_id=?1 ORDER BY rowid DESC LIMIT ?2")?;
+            let mut stmt = tx.prepare("SELECT CAST(substr(CAST(job_id AS BLOB),1,65) AS TEXT),CAST(substr(CAST(created_at AS BLOB),1,65) AS TEXT) FROM security_jobs WHERE project_id=?1 ORDER BY rowid DESC LIMIT ?2")?;
             let rows = stmt
                 .query_map(params![self.project_id, (limit + 1) as i64], |r| {
                     Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
@@ -95,6 +98,17 @@ impl Engine {
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             rows
         };
+        // Validate the pagination lookahead too, before returning any summaries.
+        for (id, created_at) in &rows {
+            if id.len() != 64
+                || !id.bytes().all(|b| b.is_ascii_hexdigit())
+                || created_at.is_empty()
+                || created_at.len() > 64
+                || created_at.chars().any(char::is_control)
+            {
+                bail!("invalid stored job list metadata");
+            }
+        }
         let has_more = rows.len() > limit;
         let mut jobs = Vec::new();
         for (id, created_at) in rows.into_iter().take(limit) {
@@ -122,12 +136,13 @@ impl Engine {
     }
     fn job_manifest(&self) -> Result<BTreeMap<String, String>> {
         // ponytail: full reconciliation per admission; replace with validated incremental snapshots after large-corpus measurement.
-        let stats = self.index()?;
-        if !stats.complete {
+        self.index()?;
+        let snapshot = self.snapshot()?;
+        // Validate coverage from the same committed view as the admitted manifest.
+        if !snapshot.stats.complete {
             bail!("job requires a complete indexed source scope");
         }
-        Ok(self
-            .snapshot()?
+        Ok(snapshot
             .files
             .into_iter()
             .map(|file| (file.path, file.content_hash))
@@ -137,20 +152,55 @@ impl Engine {
         if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
             bail!("invalid job identity");
         }
-        let payload: String = self
+        let payload: Vec<u8> = self
             .db
             .connection()
             .query_row(
-                "SELECT payload FROM security_jobs WHERE project_id=?1 AND job_id=?2",
-                params![self.project_id, id],
+                "SELECT substr(CAST(payload AS BLOB),1,?3) FROM security_jobs WHERE project_id=?1 AND job_id=?2",
+                params![self.project_id, id, 2 * 1024 * 1024 + 1],
                 |row| row.get(0),
             )
             .context("job not found in this repository")?;
         if payload.len() > 2 * 1024 * 1024 {
             bail!("job record exceeds 2 MiB");
         }
+        let payload = String::from_utf8(payload)?;
         let job: ScanJob = serde_json::from_str(&payload)?;
+        let mut recorded = BTreeSet::new();
+        let results_valid = job.results.iter().all(|result| {
+            job.source_manifest.contains_key(&result.file)
+                && recorded.insert(&result.file)
+                && result.finding_ids.len() <= 500
+                && result.finding_ids.len().checked_add(result.omitted_ids)
+                    == Some(result.finding_count)
+        });
+        let active_valid = job.active_file.as_ref().is_none_or(|file| {
+            job.source_manifest.contains_key(file)
+                && !recorded.contains(file)
+                && job.attempts_reserved > job.results.len()
+        });
+        let state_valid = match job.state {
+            JobState::Running => {
+                job.active_file.is_some() && job.attempts_reserved > job.results.len()
+            }
+            JobState::Completed => {
+                job.active_file.is_none()
+                    && job.results.len() == job.source_manifest.len()
+                    && job
+                        .results
+                        .iter()
+                        .all(|result| result.outcome == ScanOutcome::Complete)
+            }
+            // Cancellation may retain the admitted active unit for diagnosis.
+            JobState::Cancelled => true,
+            _ => job.active_file.is_none(),
+        };
         if job.schema_version != 1
+            || job.source_manifest.is_empty()
+            || !results_valid
+            || !active_valid
+            || !state_valid
+            || job.results.len() > job.attempts_reserved
             || job.id != id
             || job.project_id != self.project_id
             || job.source_snapshot != identity(&job.source_manifest)

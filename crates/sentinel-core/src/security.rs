@@ -1,7 +1,7 @@
 //! Portable, deterministic contracts for repository security intelligence.
 use serde::{Deserialize, Serialize};
 /// Increment when source extraction, resolution or flow interpretation semantics change.
-pub const ANALYSIS_SEMANTICS_REVISION: u32 = 11;
+pub const ANALYSIS_SEMANTICS_REVISION: u32 = 18;
 
 /// A project-relative source location; line numbers are one-based and inclusive.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -76,6 +76,9 @@ pub enum FlowStmt {
 /// An import binding captured from syntax, before module resolution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportRecord {
+    /// Python lexical owner; empty for module scope and legacy/other-language records.
+    #[serde(default)]
+    pub scope: String,
     pub module: String,
     pub imported: String,
     pub local: String,

@@ -37,35 +37,40 @@ def validate(corpus):
             raise ValueError("unsupported engine")
         if case.get("engine") == "graph" and case.get("entrypoint") not in case["files"]:
             raise ValueError("graph entrypoint must belong to fixture files")
-        if len(case["files"]) > 2000:
-            raise ValueError("fixture exceeds 2000 files")
-        portable_names, source_bytes = set(), 0
-        for name, source in case["files"].items():
-            # Portable paths prevent Windows drive, backslash and traversal escapes.
-            if not isinstance(name, str) or not name or "\\" in name or ":" in name or name.startswith("/") or any(
-                part in ("", ".", "..") for part in name.split("/")
-            ) or not isinstance(source, str):
-                raise ValueError("invalid fixture path or source")
-            for part in name.split("/"):
-                stem = part.split(".")[0].upper()
-                if part.endswith((".", " ")) or any(ord(c) < 32 or c in '<>"|?*' for c in part) or stem in (
-                        "CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))):
-                    raise ValueError("fixture path is not portable")
-                if part.casefold().startswith(".sentinel.db") or part.casefold() == ".git":
-                    raise ValueError("fixture overlaps scanner state")
-            folded = name.casefold()
-            if folded in portable_names:
-                raise ValueError("fixture paths collide on case-insensitive filesystems")
-            portable_names.add(folded)
-            size = len(source.encode("utf-8"))
-            source_bytes += size
-            if size > 1024 * 1024 or source_bytes > 16 * 1024 * 1024:
-                raise ValueError("fixture exceeds source byte budget")
-        for name in portable_names:
-            parts = name.split("/")
-            if any("/".join(parts[:i]) in portable_names for i in range(1, len(parts))):
-                raise ValueError("fixture file conflicts with a parent directory")
+        validate_files(case["files"])
 
+
+def validate_files(files):
+    if not isinstance(files, dict) or not files:
+        raise ValueError("expected nonempty fixture files")
+    if len(files) > 2000:
+        raise ValueError("fixture exceeds 2000 files")
+    portable_names, source_bytes = set(), 0
+    for name, source in files.items():
+        # Portable paths prevent Windows drive, backslash and traversal escapes.
+        if not isinstance(name, str) or not name or "\\" in name or ":" in name or name.startswith("/") or any(
+            part in ("", ".", "..") for part in name.split("/")
+        ) or not isinstance(source, str):
+            raise ValueError("invalid fixture path or source")
+        for part in name.split("/"):
+            stem = part.split(".")[0].upper()
+            if part.endswith((".", " ")) or any(ord(c) < 32 or c in '<>"|?*' for c in part) or stem in (
+                    "CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))):
+                raise ValueError("fixture path is not portable")
+            if part.casefold().startswith(".sentinel.db") or part.casefold() == ".git":
+                raise ValueError("fixture overlaps scanner state")
+        folded = name.casefold()
+        if folded in portable_names:
+            raise ValueError("fixture paths collide on case-insensitive filesystems")
+        portable_names.add(folded)
+        size = len(source.encode("utf-8"))
+        source_bytes += size
+        if size > 1024 * 1024 or source_bytes > 16 * 1024 * 1024:
+            raise ValueError("fixture exceeds source byte budget")
+    for name in portable_names:
+        parts = name.split("/")
+        if any("/".join(parts[:i]) in portable_names for i in range(1, len(parts))):
+            raise ValueError("fixture file conflicts with a parent directory")
 
 def validate_report(report, exit_code):
     if not isinstance(report, dict) or exit_code not in (0, 1) or report.get("outcome") != "Complete":
@@ -97,16 +102,19 @@ def rate(successes, total):
 
 
 def score(rows):
-    counts = dict(tp=0, fp=0, tn=0, fn=0, failed=0)
+    counts = dict(tp=0, fp=0, tn=0, fn=0, failed=0, failed_positive=0, failed_negative=0)
     for row in rows:
         if row["status"] != "complete":
             counts["failed"] += 1
+            counts["failed_positive" if row["positive"] else "failed_negative"] += 1
             continue
         key = ("tp" if row["detected"] else "fn") if row["positive"] else (
             "fp" if row["detected"] else "tn")
         counts[key] += 1
     return {**counts, "precision": rate(counts["tp"], counts["tp"] + counts["fp"]),
             "recall": rate(counts["tp"], counts["tp"] + counts["fn"]),
+            "completion_rate": rate(len(rows) - counts["failed"], len(rows)),
+            "positive_detection_rate": rate(counts["tp"], counts["tp"] + counts["fn"] + counts["failed_positive"]),
             "complete_cases": len(rows) - counts["failed"], "total_cases": len(rows)}
 
 
@@ -155,10 +163,13 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--split", choices=("development", "holdout", "all"), default="development")
+    parser.add_argument("--fail-on-regression", action="store_true",
+                        help="exit 1 for mapped false positives or misses; incomplete cases still exit 2")
     args = parser.parse_args()
     if not math.isfinite(args.timeout) or args.timeout <= 0:
         parser.error("timeout must be positive and finite")
     binary = args.binary.resolve(strict=True)
+    binary_sha256 = digest(binary.read_bytes())
     raw = args.corpus.read_bytes()
     corpus = json.loads(raw)
     validate(corpus)
@@ -166,10 +177,24 @@ def main():
     if not selected:
         parser.error("selected split has no cases")
     rows = [run_case(binary, case, args.timeout) for case in selected]
+    measurement_errors = []
+    try:
+        binary_sha256_after = digest(binary.read_bytes())
+    except OSError:
+        binary_sha256_after = None
+        measurement_errors.append("scanner binary unavailable after measurement")
+    if binary_sha256_after is not None and binary_sha256_after != binary_sha256:
+        measurement_errors.append("scanner binary changed during measurement")
+    if any(row["status"] != "complete" for row in rows):
+        measurement_errors.append("one or more cases failed or were incomplete")
     report = {"schema_version": 1, "corpus_sha256": digest(raw),
-              "binary_sha256": digest(binary.read_bytes()), "split": args.split,
+              "binary_sha256": binary_sha256, "binary_sha256_after": binary_sha256_after,
+              "measurement_valid": not measurement_errors, "measurement_errors": measurement_errors,
+              "split": args.split,
               "scope": "case-level detection of mapped rules; additional findings are unscored",
-              "summary": score(rows), "per_class": {
+              "summary": score(rows), "per_split": {
+                  split: score([r for r in rows if r["split"] == split])
+                  for split in sorted({r["split"] for r in rows})}, "per_class": {
                   category: score([r for r in rows if r["class"] == category])
                   for category in sorted({r["class"] for r in rows})}, "per_engine": {
                   engine: score([r for r in rows if r["engine"] == engine])
@@ -179,7 +204,11 @@ def main():
         json.dump(report, output, indent=2, allow_nan=False)
         output.write("\n")
     print(json.dumps(report["summary"], indent=2))
-    return 2 if report["summary"]["failed"] else 0
+    summary = report["summary"]
+    if measurement_errors:
+        print(json.dumps({"measurement_errors": measurement_errors}, indent=2))
+        return 2
+    return int(args.fail_on_regression and bool(summary["fp"] or summary["fn"]))
 
 
 if __name__ == "__main__":

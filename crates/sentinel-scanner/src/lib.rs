@@ -48,6 +48,7 @@ fn find_executable(name: &str) -> Option<PathBuf> {
 #[derive(Debug)]
 pub struct ScannerProcess {
     pub stdout: String,
+    pub exit_code: Option<i32>,
     pub execution_error: Option<String>,
 }
 pub struct SubprocessRunner;
@@ -151,13 +152,13 @@ impl SubprocessRunner {
                 return Err(e);
             }
         };
-        let err = match read(stderr) {
-            Ok(bytes) => bytes,
+        match read(stderr) {
+            Ok(_) => {}
             Err(e) => {
                 terminate_process_tree(&mut child);
                 return Err(e);
             }
-        };
+        }
         if let Some(reason) = failure {
             return Err(ScannerError::Execution(reason.into()));
         }
@@ -165,11 +166,20 @@ impl SubprocessRunner {
             return Err(ScannerError::Execution("output limit exceeded".into()));
         }
         // Semgrep --error and Bandit use 1 to indicate findings, not an execution failure.
-        let execution_error = (!matches!(status.code(), Some(0 | 1)))
-            .then(|| format!("exit {status}: {}", String::from_utf8_lossy(&err)));
+        // External scanner diagnostics may include source excerpts, environment values,
+        // or other repository data. Never persist raw stderr in coverage notes/reports.
+        let execution_error = (!matches!(status.code(), Some(0 | 1))).then(|| {
+            format!(
+                "exit code {}; stderr omitted because it may contain repository content",
+                status
+                    .code()
+                    .map_or_else(|| "unknown".into(), |code| code.to_string())
+            )
+        });
         let stdout = String::from_utf8(out).map_err(|e| ScannerError::Parse(e.to_string()))?;
         Ok(ScannerProcess {
             stdout,
+            exit_code: status.code(),
             execution_error,
         })
     }
@@ -258,15 +268,24 @@ pub fn normalize_findings(raw: &str, scanner: &str) -> Result<NormalizedScan> {
     let mut findings = vec![];
     let mut notes = vec![];
     if let Some(errors) = json.get("errors").and_then(|v| v.as_array()) {
-        for e in errors {
-            notes.push(format!("{scanner}: {e}"));
+        if !errors.is_empty() {
+            notes.push(format!(
+                "{scanner}: {} scanner diagnostic(s) omitted because they may contain repository content",
+                errors.len()
+            ));
         }
     }
+    let mut invalid_records = 0usize;
     for item in results {
         match parse_item(item, scanner) {
             Ok(f) => findings.push(f),
-            Err(e) => notes.push(e.to_string()),
+            Err(_) => invalid_records += 1,
         }
+    }
+    if invalid_records > 0 {
+        notes.push(format!(
+            "{scanner}: {invalid_records} invalid result record(s) omitted"
+        ));
     }
     Ok(NormalizedScan {
         findings,
@@ -368,6 +387,19 @@ mod tests {
         assert_eq!(result.findings.len(), 1);
         assert_eq!(result.coverage_notes.len(), 1);
     }
+    #[test]
+    fn scanner_diagnostics_and_invalid_records_are_redacted() {
+        let secret = "fixture-private-scanner-message";
+        let raw = format!(
+            r#"{{"errors":[{{"message":"{secret}"}}],"results":[{{"filename":"a.py","line_number":2,"test_id":"B1","issue_text":"{secret}","issue_severity":"{secret}"}}]}}"#
+        );
+        let normalized = normalize_findings(&raw, "bandit").unwrap();
+        assert!(normalized.findings.is_empty());
+        let notes = normalized.coverage_notes.join(" ");
+        assert!(notes.contains("diagnostic(s) omitted"));
+        assert!(notes.contains("invalid result record(s) omitted"));
+        assert!(!notes.contains(secret));
+    }
 }
 #[cfg(test)]
 mod subprocess_tests {
@@ -395,6 +427,7 @@ mod subprocess_tests {
         )
         .unwrap();
         assert!(p.execution_error.is_none());
+        assert_eq!(p.exit_code, Some(1));
         assert!(normalize_findings(&p.stdout, "semgrep")
             .unwrap()
             .findings
@@ -412,7 +445,26 @@ mod subprocess_tests {
         )
         .unwrap();
         assert!(p.execution_error.is_some());
+        assert!(p.execution_error.unwrap().contains("stderr omitted"));
+        assert_eq!(p.exit_code, Some(2));
         assert!(normalize_findings(&p.stdout, "semgrep").is_ok());
+    }
+    #[test]
+    fn scanner_error_diagnostics_do_not_leak_stderr() {
+        let secret = "fixture-private-scanner-diagnostic";
+        let result = SubprocessRunner::run_command(
+            &mut script(
+                &format!("[Console]::Error.WriteLine('{secret}'); exit 2"),
+                &format!("printf '%s' '{secret}' >&2; exit 2"),
+            ),
+            Duration::from_secs(10),
+            1024,
+        )
+        .unwrap();
+        let error = result.execution_error.unwrap();
+        assert!(error.contains("exit code 2"));
+        assert!(error.contains("stderr omitted"));
+        assert!(!error.contains(secret));
     }
     #[test]
     fn scanner_timeout_is_bounded() {

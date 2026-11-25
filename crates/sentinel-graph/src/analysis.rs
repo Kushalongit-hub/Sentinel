@@ -12,6 +12,16 @@ pub struct SecurityScan {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FindingEvidence {
+    #[serde(default)]
+    pub backend: Option<AnalysisBackendIdentity>,
+    #[serde(default)]
+    pub source_snapshot: Option<String>,
+    #[serde(default)]
+    pub index_complete: bool,
+    #[serde(default)]
+    pub excerpt_content_hash: Option<String>,
+    #[serde(default)]
+    pub excerpt_matches_graph: bool,
     pub finding: Finding,
     pub what: String,
     pub where_location: Location,
@@ -181,13 +191,13 @@ impl Engine {
             .collect();
         let source = self
             .checked_path(&file)
-            .and_then(|p| {
-                if std::fs::metadata(&p)?.len() > 1024 * 1024 {
-                    anyhow::bail!("source exceeds 1 MiB");
-                }
-                Ok(std::fs::read_to_string(p)?)
-            })
-            .unwrap_or_default();
+            .and_then(|p| crate::read_source(&p))
+            .ok();
+        let excerpt_content_hash = source.as_ref().map(identity);
+        let excerpt_matches_graph = snapshot.files.iter().any(|indexed| {
+            indexed.path == relative && Some(&indexed.content_hash) == excerpt_content_hash.as_ref()
+        });
+        let source = source.as_deref().unwrap_or_default();
         let start = finding.line.saturating_sub(4);
         let affected_code = source
             .lines()
@@ -205,6 +215,9 @@ impl Engine {
             remediation_hints.push("Inspect the triggering rule and validate the relevant API, input trust boundary, and framework behavior before patching.".into());
         }
         let mut coverage_notes = taint.coverage_notes;
+        if !excerpt_matches_graph {
+            coverage_notes.push("Current source excerpt is unavailable, unindexed or differs from the graph snapshot; symbol and flow evidence describe the indexed view.".into());
+        }
         if source.is_empty() {
             coverage_notes.push(
                 "Current source excerpt is unavailable; historical finding evidence is preserved."
@@ -213,6 +226,11 @@ impl Engine {
         }
         coverage_notes.push("Finding history can predate the current source snapshot; rerun a scan or verification to establish current status.".into());
         Ok(FindingEvidence {
+            backend: taint.backend,
+            source_snapshot: taint.source_snapshot,
+            index_complete: snapshot.stats.complete,
+            excerpt_content_hash,
+            excerpt_matches_graph,
             what: finding.description.clone(),
             where_location: Location {
                 file: relative,

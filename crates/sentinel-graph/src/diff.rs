@@ -10,7 +10,7 @@ use sentinel_core::evidence::{
 use sentinel_core::{security::*, Finding};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     time::Instant,
 };
 
@@ -344,6 +344,55 @@ pub(crate) fn compare(
         after_detector: after.detector,
     }
 }
+/// Conservative dependency closure over both immutable graph views. Imports
+/// propagate from a dependency to its importers; calls preserve both directions.
+fn affected_files(
+    project: &str,
+    snapshots: [&Snapshot; 2],
+    mut affected: BTreeSet<String>,
+) -> Vec<String> {
+    let mut neighbors: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for snapshot in snapshots {
+        let mut files_by_id = BTreeMap::new();
+        for file in &snapshot.files {
+            files_by_id.insert(identity((project, &file.path, "file")), &file.path);
+            for symbol in &file.symbols {
+                files_by_id.insert(symbol.id.clone(), &file.path);
+            }
+        }
+        for edge in snapshot.edges.iter().filter(|edge| edge.resolved) {
+            let (Some(from), Some(to)) = (files_by_id.get(&edge.from), files_by_id.get(&edge.to))
+            else {
+                continue;
+            };
+            if edge.kind == "CALLS" || edge.kind == "IMPORTS" {
+                neighbors
+                    .entry((*to).clone())
+                    .or_default()
+                    .insert((*from).clone());
+            }
+            if edge.kind == "CALLS" {
+                neighbors
+                    .entry((*from).clone())
+                    .or_default()
+                    .insert((*to).clone());
+            }
+        }
+    }
+    // Each admitted file is visited once; cycles cannot widen the indexed scope.
+    let mut pending = affected.iter().cloned().collect::<VecDeque<_>>();
+    while let Some(file) = pending.pop_front() {
+        if let Some(dependents) = neighbors.get(&file) {
+            for dependent in dependents {
+                if affected.insert(dependent.clone()) {
+                    pending.push_back(dependent.clone());
+                }
+            }
+        }
+    }
+    affected.into_iter().collect()
+}
+
 impl Engine {
     /// Compare changed and security-neighbor files with a validated Git ref (HEAD by default).
     /// Changed source is never checked out or executed.
@@ -365,41 +414,16 @@ impl Engine {
         let current = self.snapshot()?;
         let commit = changes.base_commit.unwrap();
         let (mut baseline, mut old_sources, tracked) = base_snapshot(self, &commit)?;
-        let mut affected = changes
-            .changed
-            .iter()
-            .chain(&changes.deleted)
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        // Include call neighbors from both snapshots so removed or introduced edges are covered.
-        for snapshot in [&current, &baseline] {
-            let changed_ids = snapshot
-                .files
+        let affected = affected_files(
+            &self.project_id,
+            [&current, &baseline],
+            changes
+                .changed
                 .iter()
-                .filter(|f| affected.contains(&f.path))
-                .flat_map(|f| &f.symbols)
-                .map(|s| s.id.as_str())
-                .collect::<BTreeSet<_>>();
-            let mut neighbor_ids = BTreeSet::new();
-            for edge in snapshot
-                .edges
-                .iter()
-                .filter(|e| e.kind == "CALLS" && e.resolved)
-            {
-                if changed_ids.contains(edge.from.as_str()) {
-                    neighbor_ids.insert(edge.to.as_str());
-                }
-                if changed_ids.contains(edge.to.as_str()) {
-                    neighbor_ids.insert(edge.from.as_str());
-                }
-            }
-            for symbol in snapshot.files.iter().flat_map(|f| &f.symbols) {
-                if neighbor_ids.contains(symbol.id.as_str()) {
-                    affected.insert(symbol.location.file.clone());
-                }
-            }
-        }
-        let affected = affected.into_iter().collect::<Vec<_>>();
+                .chain(&changes.deleted)
+                .cloned()
+                .collect(),
+        );
         let mut sources = BTreeMap::new();
         let mut current_notes = vec![];
         for file in &affected {
@@ -411,13 +435,7 @@ impl Engine {
                         "{file}: changed source is outside the current indexed scope"
                     ));
                 }
-                match std::fs::metadata(&path).and_then(|m| {
-                    if m.len() > 1024 * 1024 {
-                        Err(std::io::Error::other("source exceeds 1 MiB"))
-                    } else {
-                        std::fs::read_to_string(&path)
-                    }
-                }) {
+                match crate::read_source(&path) {
                     Ok(source) => {
                         sources.insert(file.clone(), source);
                     }
@@ -494,5 +512,61 @@ mod evidence_tests {
             .notes
             .iter()
             .any(|note| note.contains("source changed")));
+    }
+}
+
+#[cfg(test)]
+mod impact_tests {
+    use super::*;
+
+    #[test]
+    fn call_closure_crosses_both_snapshots_is_order_independent_and_skips_opaque_edges() {
+        let files = ["a.py", "b.py", "c.py", "d.py", "opaque.py"]
+            .map(|path| {
+                sentinel_ast::security::extract_security_file(
+                    "project",
+                    path,
+                    "def f():\n    return 1\n",
+                )
+                .unwrap()
+            })
+            .to_vec();
+        let edge = |from: usize, to: usize, resolved| SecurityEdge {
+            from: files[from].symbols[0].id.clone(),
+            to: files[to].symbols[0].id.clone(),
+            kind: "CALLS".into(),
+            file: files[from].path.clone(),
+            line: 1,
+            name: "f".into(),
+            resolved,
+        };
+        let current = Snapshot {
+            files: files.clone(),
+            edges: vec![edge(0, 1, true), edge(2, 3, true), edge(0, 4, false)],
+            stats: IndexStats::default(),
+        };
+        let baseline = Snapshot {
+            files: files.clone(),
+            edges: vec![edge(1, 2, true), edge(3, 0, true)],
+            stats: IndexStats::default(),
+        };
+        let changed = BTreeSet::from(["a.py".into()]);
+        let expected = vec!["a.py", "b.py", "c.py", "d.py"];
+        assert_eq!(
+            affected_files("project", [&current, &baseline], changed.clone()),
+            expected
+        );
+        assert_eq!(
+            affected_files("project", [&baseline, &current], changed),
+            expected
+        );
+        assert_eq!(
+            affected_files(
+                "project",
+                [&current, &baseline],
+                BTreeSet::from(["d.py".into()])
+            ),
+            expected
+        );
     }
 }

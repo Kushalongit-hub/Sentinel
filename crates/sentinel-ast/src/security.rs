@@ -334,6 +334,7 @@ fn imports(node: Node<'_>, source: &str) -> Vec<ImportRecord> {
                     continue;
                 }
                 result.push(ImportRecord {
+                    scope: String::new(),
                     module: module.trim().into(),
                     imported: parts[0].into(),
                     local: parts.last().unwrap().to_string(),
@@ -356,6 +357,7 @@ fn imports(node: Node<'_>, source: &str) -> Vec<ImportRecord> {
                         if let Some(name) = node.child_by_field_name("name") {
                             let local = node.child_by_field_name("alias").unwrap_or(name);
                             result.push(ImportRecord {
+                                scope: String::new(),
                                 module: module.into(),
                                 imported: text(name, source).into(),
                                 local: text(local, source).into(),
@@ -368,6 +370,7 @@ fn imports(node: Node<'_>, source: &str) -> Vec<ImportRecord> {
                             named(node).into_iter().find(|n| n.kind() == "identifier")
                         {
                             result.push(ImportRecord {
+                                scope: String::new(),
                                 module: module.into(),
                                 imported: "*".into(),
                                 local: text(local, source).into(),
@@ -378,6 +381,7 @@ fn imports(node: Node<'_>, source: &str) -> Vec<ImportRecord> {
                     "identifier" if node.parent().is_some_and(|p| p.kind() == "import_clause") => {
                         // Default exports need export identity modelling; do not guess a same-named function.
                         result.push(ImportRecord {
+                            scope: String::new(),
                             module: module.into(),
                             imported: "default".into(),
                             local: text(node, source).into(),
@@ -404,6 +408,7 @@ fn imports(node: Node<'_>, source: &str) -> Vec<ImportRecord> {
                     continue;
                 }
                 result.push(ImportRecord {
+                    scope: String::new(),
                     module: parts[0].into(),
                     imported: "*".into(),
                     local: parts.last().unwrap().to_string(),
@@ -416,6 +421,7 @@ fn imports(node: Node<'_>, source: &str) -> Vec<ImportRecord> {
         let qualified = parts[0].trim();
         if let Some((module, name)) = qualified.rsplit_once("::") {
             result.push(ImportRecord {
+                scope: String::new(),
                 module: module.into(),
                 imported: name.into(),
                 local: parts.last().unwrap().rsplit("::").next().unwrap().into(),
@@ -1129,7 +1135,13 @@ fn visit(
         node.kind(),
         "import_statement" | "import_from_statement" | "use_declaration"
     ) {
-        out.imports.extend(imports(node, source));
+        let mut bindings = imports(node, source);
+        if out.language == "python" {
+            for binding in &mut bindings {
+                binding.scope = scope.to_string();
+            }
+        }
+        out.imports.extend(bindings);
     }
     for child in named(node) {
         visit(child, source, &child_scope, project, path, out, counts);

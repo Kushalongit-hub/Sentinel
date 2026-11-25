@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled development trace endpoint pair, related to existing flow fixtures; not independently reviewed or held out; ordered-step extension of the same two questions, not additional independent cases",
+  "cases": [
+    {
+      "id": "cross-file-sql-trace",
+      "family": "python-cross-file-sql-trace-pair",
+      "class": "trace-endpoints",
+      "split": "development",
+      "command": "trace",
+      "target": "handler",
+      "files": {
+        "routes.py": "from service import create_user\ndef handler(request):\n    value = request.args['name']\n    return create_user(value)\n",
+        "service.py": "from repository import insert_user\ndef create_user(value):\n    return insert_user(value)\n",
+        "repository.py": "def insert_user(value):\n    cursor.execute('SELECT ' + value)\n"
+      },
+      "expected": {
+        "paths": [
+          [
+            "sql-injection",
+            [
+              "routes.py",
+              3,
+              "handler"
+            ],
+            [
+              "repository.py",
+              2,
+              "insert_user"
+            ],
+            [
+              [
+                "routes.py",
+                3,
+                "handler"
+              ],
+              [
+                "service.py",
+                2,
+                "create_user"
+              ],
+              [
+                "repository.py",
+                1,
+                "insert_user"
+              ],
+              [
+                "repository.py",
+                2,
+                "insert_user"
+              ]
+            ]
+          ]
+        ]
+      },
+      "trace_steps": true
+    },
+    {
+      "id": "parameterized-sql-trace",
+      "family": "python-cross-file-sql-trace-pair",
+      "class": "trace-endpoints",
+      "split": "development",
+      "command": "trace",
+      "target": "handler",
+      "files": {
+        "routes.py": "from service import create_user\ndef handler(request):\n    value = request.args['name']\n    return create_user(value)\n",
+        "service.py": "from repository import insert_user\ndef create_user(value):\n    return insert_user(value)\n",
+        "repository.py": "def insert_user(value):\n    cursor.execute('SELECT ?', (value,))\n"
+      },
+      "expected": {
+        "paths": []
+      },
+      "trace_steps": true
+    }
+  ]
+}

@@ -1,0 +1,334 @@
+{
+  "schema_version": 1,
+  "binary_sha256": "d0357546d5de364ea0aecdae1bc623d95551923aaf85eedf224d84e8bdfd0a3d",
+  "binary_sha256_after": "d0357546d5de364ea0aecdae1bc623d95551923aaf85eedf224d84e8bdfd0a3d",
+  "corpus_sha256": "9aef39420b96fedb1b38e1bff3678bb5a0026f279385c25c618fd153c0eeacdb",
+  "measurement_valid": true,
+  "measurement_errors": [],
+  "label_status": "author-labelled development cases from one lexical-method family; not independently reviewed or held out",
+  "split": "development",
+  "scope": "Exact file/name or opted-in qualified-name symbol multisets and call-name/resolution multisets, with endpoint direction when explicitly labelled. Trace cases score sink category and directed file/line/qualified-symbol endpoints, plus ordered steps when opted in. No operation-text, confidence, type, guard or AI scoring. Labels require independent review.",
+  "summary": {
+    "total": 2,
+    "complete": 2,
+    "correct": 2,
+    "incorrect": 0,
+    "failed_or_partial": 0,
+    "complete_accuracy": {
+      "value": 1.0,
+      "wilson_95": [
+        0.34238022750665303,
+        1.0
+      ],
+      "denominator": 2
+    },
+    "correct_response_rate": {
+      "value": 1.0,
+      "wilson_95": [
+        0.34238022750665303,
+        1.0
+      ],
+      "denominator": 2
+    }
+  },
+  "per_class": {
+    "qualified-methods": {
+      "total": 2,
+      "complete": 2,
+      "correct": 2,
+      "incorrect": 0,
+      "failed_or_partial": 0,
+      "complete_accuracy": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "correct_response_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      }
+    }
+  },
+  "per_split": {
+    "development": {
+      "total": 2,
+      "complete": 2,
+      "correct": 2,
+      "incorrect": 0,
+      "failed_or_partial": 0,
+      "complete_accuracy": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "correct_response_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "first-method-callee",
+      "family": "python-lexical-method-identity",
+      "class": "qualified-methods",
+      "split": "development",
+      "command": "callees",
+      "target": "First.run",
+      "status": "complete",
+      "source_sha256": "df65e5c2ebe52573bd3c6a5198b71083f1c0c6e352a0db5582d09ec882b432e4",
+      "expected": {
+        "symbols": [
+          [
+            "methods.py",
+            "First.helper"
+          ]
+        ],
+        "edges": [
+          [
+            "self.helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "First.run"
+            ],
+            [
+              "methods.py",
+              "First.helper"
+            ],
+            "self.helper",
+            true
+          ]
+        ]
+      },
+      "symbol_names": "qualified",
+      "expected_source_snapshot": "db227a36cfb61772ac3f297b2e0323bc7ba893cda08f55c2ef82328e596662bf",
+      "exit_code": 0,
+      "query": {
+        "backend": {
+          "name": "sentinel-native",
+          "version": "0.1.0",
+          "semantics_revision": 14
+        },
+        "source_snapshot": "db227a36cfb61772ac3f297b2e0323bc7ba893cda08f55c2ef82328e596662bf",
+        "index_complete": true,
+        "coverage_notes": [],
+        "target": [
+          {
+            "id": "4b48553ecc62a4215d5910453d31ae602a23ec588bdd93f963a81cc78c348bfb",
+            "name": "run",
+            "qualified_name": "First.run",
+            "kind": "method",
+            "location": {
+              "file": "methods.py",
+              "start_line": 4,
+              "end_line": 5
+            },
+            "language": "python",
+            "content_hash": "69b1410cc2ed0e01502b2f45c165fd782cc2c1cd0fad6dc264a95d310c14c8b6"
+          }
+        ],
+        "symbols": [
+          {
+            "id": "93ee653836072e04593079356194c2578f3064cd2b58f6c889b984bd355a809d",
+            "name": "helper",
+            "qualified_name": "First.helper",
+            "kind": "method",
+            "location": {
+              "file": "methods.py",
+              "start_line": 2,
+              "end_line": 3
+            },
+            "language": "python",
+            "content_hash": "6215b225ba2ddb8cedbdcaee4c39b212fc74b76151ccdc9daafdcd8d2f701f1f"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4b48553ecc62a4215d5910453d31ae602a23ec588bdd93f963a81cc78c348bfb",
+            "to": "93ee653836072e04593079356194c2578f3064cd2b58f6c889b984bd355a809d",
+            "kind": "CALLS",
+            "file": "methods.py",
+            "line": 5,
+            "name": "self.helper",
+            "resolved": true
+          }
+        ],
+        "omitted_count": 0,
+        "duration_ms": 0
+      },
+      "actual": {
+        "symbols": [
+          [
+            "methods.py",
+            "First.helper"
+          ]
+        ],
+        "edges": [
+          [
+            "self.helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "First.run"
+            ],
+            [
+              "methods.py",
+              "First.helper"
+            ],
+            "self.helper",
+            true
+          ]
+        ]
+      },
+      "correct": true,
+      "elapsed_ms": 148.48939998773858
+    },
+    {
+      "id": "second-method-callee",
+      "family": "python-lexical-method-identity",
+      "class": "qualified-methods",
+      "split": "development",
+      "command": "callees",
+      "target": "Second.run",
+      "status": "complete",
+      "source_sha256": "df65e5c2ebe52573bd3c6a5198b71083f1c0c6e352a0db5582d09ec882b432e4",
+      "expected": {
+        "symbols": [
+          [
+            "methods.py",
+            "Second.helper"
+          ]
+        ],
+        "edges": [
+          [
+            "self.helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "Second.run"
+            ],
+            [
+              "methods.py",
+              "Second.helper"
+            ],
+            "self.helper",
+            true
+          ]
+        ]
+      },
+      "symbol_names": "qualified",
+      "expected_source_snapshot": "db227a36cfb61772ac3f297b2e0323bc7ba893cda08f55c2ef82328e596662bf",
+      "exit_code": 0,
+      "query": {
+        "backend": {
+          "name": "sentinel-native",
+          "version": "0.1.0",
+          "semantics_revision": 14
+        },
+        "source_snapshot": "db227a36cfb61772ac3f297b2e0323bc7ba893cda08f55c2ef82328e596662bf",
+        "index_complete": true,
+        "coverage_notes": [],
+        "target": [
+          {
+            "id": "454aeb2c293887a4fa77fab531409885f9b09febd46e43b891aa722c6235e9b5",
+            "name": "run",
+            "qualified_name": "Second.run",
+            "kind": "method",
+            "location": {
+              "file": "methods.py",
+              "start_line": 10,
+              "end_line": 11
+            },
+            "language": "python",
+            "content_hash": "69b1410cc2ed0e01502b2f45c165fd782cc2c1cd0fad6dc264a95d310c14c8b6"
+          }
+        ],
+        "symbols": [
+          {
+            "id": "68f14ae1ede94c8fe0b7f6096ed4392ece652a3b65bcbb8303a34b1945b4b220",
+            "name": "helper",
+            "qualified_name": "Second.helper",
+            "kind": "method",
+            "location": {
+              "file": "methods.py",
+              "start_line": 8,
+              "end_line": 9
+            },
+            "language": "python",
+            "content_hash": "0e541d0e52d646a5794c55935cd1c2e43019d7679b7da9d01bb2b7497d67c6ad"
+          }
+        ],
+        "edges": [
+          {
+            "from": "454aeb2c293887a4fa77fab531409885f9b09febd46e43b891aa722c6235e9b5",
+            "to": "68f14ae1ede94c8fe0b7f6096ed4392ece652a3b65bcbb8303a34b1945b4b220",
+            "kind": "CALLS",
+            "file": "methods.py",
+            "line": 11,
+            "name": "self.helper",
+            "resolved": true
+          }
+        ],
+        "omitted_count": 0,
+        "duration_ms": 0
+      },
+      "actual": {
+        "symbols": [
+          [
+            "methods.py",
+            "Second.helper"
+          ]
+        ],
+        "edges": [
+          [
+            "self.helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "Second.run"
+            ],
+            [
+              "methods.py",
+              "Second.helper"
+            ],
+            "self.helper",
+            true
+          ]
+        ]
+      },
+      "correct": true,
+      "elapsed_ms": 178.73130000953097
+    }
+  ]
+}

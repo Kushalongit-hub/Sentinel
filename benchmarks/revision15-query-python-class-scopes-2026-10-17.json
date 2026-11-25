@@ -1,0 +1,304 @@
+{
+  "schema_version": 1,
+  "binary_sha256": "e5f5e98398737a3f825753dd842088209f672f617dfc3bc9db91b91d4db05eaf",
+  "binary_sha256_after": "e5f5e98398737a3f825753dd842088209f672f617dfc3bc9db91b91d4db05eaf",
+  "corpus_sha256": "3556473fa35732377be2546adf4714872652509aae019e02d9a6f907ce82a9b8",
+  "measurement_valid": true,
+  "measurement_errors": [],
+  "label_status": "author-labelled Python class lexical-scope questions in the existing lexical-method development family; not independently reviewed or held out",
+  "split": "development",
+  "scope": "Exact file/name or opted-in qualified-name symbol multisets and call-name/resolution multisets, with endpoint direction when explicitly labelled. Trace cases score sink category and directed file/line/qualified-symbol endpoints, plus ordered steps when opted in. No operation-text, confidence, type, guard or AI scoring. Labels require independent review.",
+  "summary": {
+    "total": 2,
+    "complete": 2,
+    "correct": 2,
+    "incorrect": 0,
+    "failed_or_partial": 0,
+    "complete_accuracy": {
+      "value": 1.0,
+      "wilson_95": [
+        0.34238022750665303,
+        1.0
+      ],
+      "denominator": 2
+    },
+    "correct_response_rate": {
+      "value": 1.0,
+      "wilson_95": [
+        0.34238022750665303,
+        1.0
+      ],
+      "denominator": 2
+    }
+  },
+  "per_class": {
+    "python-class-lexical-boundary": {
+      "total": 2,
+      "complete": 2,
+      "correct": 2,
+      "incorrect": 0,
+      "failed_or_partial": 0,
+      "complete_accuracy": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "correct_response_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      }
+    }
+  },
+  "per_split": {
+    "development": {
+      "total": 2,
+      "complete": 2,
+      "correct": 2,
+      "incorrect": 0,
+      "failed_or_partial": 0,
+      "complete_accuracy": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "correct_response_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "bare-method-call-prefers-module-helper",
+      "family": "python-lexical-method-identity",
+      "class": "python-class-lexical-boundary",
+      "split": "development",
+      "command": "callees",
+      "target": "Worker.run",
+      "status": "complete",
+      "source_sha256": "e2471644f1d39233d5e2529b5ecdb846027445a2c2ebd1907102f28ddf71a337",
+      "expected": {
+        "symbols": [
+          [
+            "methods.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "Worker.run"
+            ],
+            [
+              "methods.py",
+              "helper"
+            ],
+            "helper",
+            true
+          ]
+        ]
+      },
+      "symbol_names": "qualified",
+      "expected_source_snapshot": "302529eb9e50ae9b08e988f5cced02ee38ab5d4ec82658f59a141d6f2a7396eb",
+      "exit_code": 0,
+      "query": {
+        "backend": {
+          "name": "sentinel-native",
+          "version": "0.1.0",
+          "semantics_revision": 15
+        },
+        "source_snapshot": "302529eb9e50ae9b08e988f5cced02ee38ab5d4ec82658f59a141d6f2a7396eb",
+        "index_complete": true,
+        "coverage_notes": [],
+        "target": [
+          {
+            "id": "e77d3dfb6a06d3f07c0ccb1555d9fb264175f541d5a1cc55bd4061d5efa153c9",
+            "name": "run",
+            "qualified_name": "Worker.run",
+            "kind": "method",
+            "location": {
+              "file": "methods.py",
+              "start_line": 7,
+              "end_line": 8
+            },
+            "language": "python",
+            "content_hash": "756fef9d25f29b57ad60075dda45ccedbb1c5d47f593b3672dd77825dae40a3f"
+          }
+        ],
+        "symbols": [
+          {
+            "id": "a3b4cc7271acde955c3a86a274be2b189215e8386a31998e12cc024abecf7b54",
+            "name": "helper",
+            "qualified_name": "helper",
+            "kind": "function",
+            "location": {
+              "file": "methods.py",
+              "start_line": 1,
+              "end_line": 2
+            },
+            "language": "python",
+            "content_hash": "5a77f8e8b15eec1b69f3c7edcef3ee5a9dbc6647163bc530406f49c72a045ab3"
+          }
+        ],
+        "edges": [
+          {
+            "from": "e77d3dfb6a06d3f07c0ccb1555d9fb264175f541d5a1cc55bd4061d5efa153c9",
+            "to": "a3b4cc7271acde955c3a86a274be2b189215e8386a31998e12cc024abecf7b54",
+            "kind": "CALLS",
+            "file": "methods.py",
+            "line": 8,
+            "name": "helper",
+            "resolved": true
+          }
+        ],
+        "omitted_count": 0,
+        "duration_ms": 0
+      },
+      "actual": {
+        "symbols": [
+          [
+            "methods.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "Worker.run"
+            ],
+            [
+              "methods.py",
+              "helper"
+            ],
+            "helper",
+            true
+          ]
+        ]
+      },
+      "correct": true,
+      "elapsed_ms": 78.14500000677072
+    },
+    {
+      "id": "class-method-is-not-a-bare-lexical-binding",
+      "family": "python-lexical-method-identity",
+      "class": "python-class-lexical-boundary",
+      "split": "development",
+      "command": "callees",
+      "target": "Worker.run",
+      "status": "complete",
+      "source_sha256": "a7a622b583113f034684cdd9495d5811c89538527053e0fd232f7eab27f2e11d",
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "Worker.run"
+            ],
+            null,
+            "helper",
+            false
+          ]
+        ]
+      },
+      "symbol_names": "qualified",
+      "expected_source_snapshot": "9ea4757a469f481111e7d70205a12a4b5782ab901f53f32826015d2c8c97d829",
+      "exit_code": 0,
+      "query": {
+        "backend": {
+          "name": "sentinel-native",
+          "version": "0.1.0",
+          "semantics_revision": 15
+        },
+        "source_snapshot": "9ea4757a469f481111e7d70205a12a4b5782ab901f53f32826015d2c8c97d829",
+        "index_complete": true,
+        "coverage_notes": [],
+        "target": [
+          {
+            "id": "93d203047a5ddc425c672a5ca20a0be5388bc46f472fe2008d505c252174c310",
+            "name": "run",
+            "qualified_name": "Worker.run",
+            "kind": "method",
+            "location": {
+              "file": "methods.py",
+              "start_line": 4,
+              "end_line": 5
+            },
+            "language": "python",
+            "content_hash": "756fef9d25f29b57ad60075dda45ccedbb1c5d47f593b3672dd77825dae40a3f"
+          }
+        ],
+        "symbols": [],
+        "edges": [
+          {
+            "from": "93d203047a5ddc425c672a5ca20a0be5388bc46f472fe2008d505c252174c310",
+            "to": "unresolved:helper",
+            "kind": "CALLS",
+            "file": "methods.py",
+            "line": 5,
+            "name": "helper",
+            "resolved": false
+          }
+        ],
+        "omitted_count": 0,
+        "duration_ms": 0
+      },
+      "actual": {
+        "symbols": [],
+        "edges": [
+          [
+            "helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "Worker.run"
+            ],
+            null,
+            "helper",
+            false
+          ]
+        ]
+      },
+      "correct": true,
+      "elapsed_ms": 78.86680000228807
+    }
+  ]
+}

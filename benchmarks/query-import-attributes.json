@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled Python import boundaries from the existing import-scope development family; not independently reviewed or held out",
+  "cases": [
+    {
+      "id": "namespace-module-helper",
+      "family": "python-import-symbol-scope",
+      "class": "import-attribute-boundaries",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "symbol_names": "qualified",
+      "files": {
+        "routes.py": "import service as lib\ndef handler(value):\n    return lib.helper(value)\n",
+        "service.py": "def helper(value):\n    return value\nclass Tools:\n    def helper(self, value):\n        return value\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "service.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "lib.helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            [
+              "service.py",
+              "helper"
+            ],
+            "lib.helper",
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "namespace-method-is-not-module-export",
+      "family": "python-import-symbol-scope",
+      "class": "import-attribute-boundaries",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "symbol_names": "qualified",
+      "files": {
+        "routes.py": "import service as lib\ndef handler(value):\n    return lib.helper(value)\n",
+        "service.py": "class Tools:\n    def helper(self, value):\n        return value\n"
+      },
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "lib.helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            null,
+            "lib.helper",
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "id": "named-import-attribute-is-not-function-call",
+      "family": "python-import-symbol-scope",
+      "class": "import-attribute-boundaries",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "symbol_names": "qualified",
+      "files": {
+        "routes.py": "from service import helper as run\ndef handler(value):\n    return run.unrelated(value)\n",
+        "service.py": "def helper(value):\n    return value\n"
+      },
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "run.unrelated",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            null,
+            "run.unrelated",
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "id": "deep-namespace-chain-is-not-short-name-proof",
+      "family": "python-import-symbol-scope",
+      "class": "import-attribute-boundaries",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "symbol_names": "qualified",
+      "files": {
+        "routes.py": "import service as lib\ndef handler(value):\n    return lib.Tools.helper(value)\n",
+        "service.py": "class Tools:\n    def helper(self, value):\n        return value\n"
+      },
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "lib.Tools.helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            null,
+            "lib.Tools.helper",
+            false
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -35,8 +35,14 @@ pub struct ContextItem {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityContext {
+    #[serde(default)]
+    pub backend: Option<AnalysisBackendIdentity>,
+    #[serde(default)]
+    pub source_snapshot: Option<String>,
     pub target: String,
     pub target_symbols: Vec<SymbolInfo>,
+    #[serde(default)]
+    pub omitted_target_symbols: Option<usize>,
     pub selected_items: Vec<ContextItem>,
     pub omitted_count: usize,
     pub complete: bool,
@@ -54,6 +60,30 @@ impl Engine {
         let snapshot = self.snapshot()?;
         let mut notes = snapshot.stats.coverage_notes.clone();
         let git = sentinel_scanner::git::changes(&self.root, None, false, false, false).ok();
+        let indexed_paths = snapshot
+            .files
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect::<BTreeSet<_>>();
+        let mut diff_scope_complete = true;
+        if target == "diff" {
+            if let Some(changes) = &git {
+                if changes
+                    .changed
+                    .iter()
+                    .any(|path| !indexed_paths.contains(path.as_str()))
+                {
+                    diff_scope_complete = false;
+                    notes.push("Changed paths are outside the current indexed scope; diff context is partial.".into());
+                }
+                if !changes.deleted.is_empty() {
+                    diff_scope_complete = false;
+                    notes.push("Deleted paths have no current graph symbols; use scan_diff for baseline evidence.".into());
+                }
+            } else {
+                diff_scope_complete = false;
+            }
+        }
         let targets = if target == "diff" {
             let changed = git
                 .as_ref()
@@ -117,23 +147,19 @@ impl Engine {
                     .or_insert((70, "direct caller".into()));
             }
         }
+        let files_by_id = snapshot
+            .files
+            .iter()
+            .map(|file| (identity((&self.project_id, &file.path, "file")), file))
+            .collect::<BTreeMap<_, _>>();
         for edge in snapshot
             .edges
             .iter()
             .filter(|e| e.kind == "IMPORTS" && e.resolved && target_files.contains(e.file.as_str()))
         {
-            if let Some(module) = snapshot
-                .files
-                .iter()
-                .flat_map(|f| &f.symbols)
-                .find(|s| s.id == edge.to)
-            {
-                for symbol in snapshot
-                    .files
-                    .iter()
-                    .flat_map(|f| &f.symbols)
-                    .filter(|s| s.location.file == module.location.file)
-                {
+            // IMPORTS endpoints identify files, not their separate module symbols.
+            if let Some(module) = files_by_id.get(&edge.to) {
+                for symbol in &module.symbols {
                     scores
                         .entry(symbol.id.clone())
                         .or_insert((50, "imported module dependency".into()));
@@ -157,27 +183,25 @@ impl Engine {
                     .or_insert((25, "two-hop call dependency".into()));
             }
         }
-        let mut candidates: Vec<(String, ContextItem)> = vec![];
-        let push = |candidates: &mut Vec<(String, ContextItem)>,
+        let mut candidates: BTreeMap<String, ContextItem> = BTreeMap::new();
+        let push = |candidates: &mut BTreeMap<String, ContextItem>,
                     key: String,
                     score: u16,
                     reason: &str,
                     evidence: ContextEvidence| {
-            if let Some((_, item)) = candidates.iter_mut().find(|(existing, _)| existing == &key) {
-                item.relevance_score = item.relevance_score.max(score);
-                if !item.reason_selected.iter().any(|r| r == reason) {
-                    item.reason_selected.push(reason.into());
-                }
-                return;
-            }
-            candidates.push((
-                key,
-                ContextItem {
+            candidates
+                .entry(key)
+                .and_modify(|item| {
+                    item.relevance_score = item.relevance_score.max(score);
+                    if !item.reason_selected.iter().any(|r| r == reason) {
+                        item.reason_selected.push(reason.into());
+                    }
+                })
+                .or_insert_with(|| ContextItem {
                     relevance_score: score,
                     reason_selected: vec![reason.into()],
                     evidence,
-                },
-            ))
+                });
         };
         for symbol in snapshot.files.iter().flat_map(|f| &f.symbols) {
             if let Some((score, reason)) = scores.get(&symbol.id) {
@@ -191,7 +215,10 @@ impl Engine {
             }
         }
         for edge in &snapshot.edges {
-            if scores.contains_key(&edge.from) || target_ids.contains(edge.to.as_str()) {
+            if scores.contains_key(&edge.from)
+                || target_ids.contains(edge.to.as_str())
+                || (edge.kind == "IMPORTS" && target_files.contains(edge.file.as_str()))
+            {
                 let score = if edge.kind == "FLOWS_TO" { 90 } else { 70 };
                 push(
                     &mut candidates,
@@ -238,25 +265,27 @@ impl Engine {
                 ContextEvidence::TaintPath(path.clone()),
             );
         }
-        for finding in self.db.list_findings(true)? {
-            let relative = finding
-                .file
-                .strip_prefix(&self.root)
-                .ok()
-                .map(|p| p.to_string_lossy().replace('\\', "/"));
-            if relative.as_ref().is_some_and(|file| {
-                snapshot.files.iter().any(|f| {
-                    f.path == *file && f.symbols.iter().any(|s| scores.contains_key(&s.id))
-                })
-            }) {
-                push(
-                    &mut candidates,
-                    format!("finding:{}", finding.id),
-                    90,
-                    "existing finding in target file; scan history may predate current source",
-                    ContextEvidence::Finding(finding),
-                );
-            }
+        let related_files = snapshot
+            .files
+            .iter()
+            .filter(|file| {
+                file.symbols
+                    .iter()
+                    .any(|symbol| scores.contains_key(&symbol.id))
+            })
+            .map(|file| self.root.join(&file.path))
+            .collect::<Vec<_>>();
+        for finding in self
+            .db
+            .list_active_findings_for_files(&related_files, 200)?
+        {
+            push(
+                &mut candidates,
+                format!("finding:{}", finding.id),
+                90,
+                "existing finding in target file; scan history may predate current source",
+                ContextEvidence::Finding(finding),
+            );
         }
         let languages = targets
             .iter()
@@ -282,9 +311,15 @@ impl Engine {
                 }),
             );
         }
+        let mut omitted_changes = 0;
         if let Some(git) = git {
-            for file in git.changed.into_iter().chain(git.deleted) {
-                if target_files.contains(file.as_str())
+            for (position, file) in git.changed.into_iter().chain(git.deleted).enumerate() {
+                if target == "diff" && position >= 200 {
+                    omitted_changes += 1;
+                    continue;
+                }
+                if target == "diff"
+                    || target_files.contains(file.as_str())
                     || snapshot.files.iter().any(|f| {
                         f.path == file && f.symbols.iter().any(|s| scores.contains_key(&s.id))
                     })
@@ -303,14 +338,18 @@ impl Engine {
         }
         notes.extend(trace.coverage_notes);
         notes.push("Security guards are annotations, not proof of authorization correctness. Dynamic dispatch and advanced aliasing require manual review.".into());
+        let mut candidates = candidates.into_iter().collect::<Vec<_>>();
         candidates.sort_by(|(ka, a), (kb, b)| {
             b.relevance_score
                 .cmp(&a.relevance_score)
                 .then_with(|| ka.cmp(kb))
         });
-        let omitted_count = candidates.len().saturating_sub(max_items);
+        let omitted_count = candidates.len().saturating_sub(max_items) + omitted_changes;
         Ok(SecurityContext {
+            backend: trace.backend,
+            source_snapshot: trace.source_snapshot,
             target: target.into(),
+            omitted_target_symbols: Some(targets.len().saturating_sub(max_items)),
             target_symbols: targets
                 .into_iter()
                 .take(max_items)
@@ -322,7 +361,7 @@ impl Engine {
                 .map(|(_, item)| item)
                 .collect(),
             omitted_count,
-            complete: snapshot.stats.complete && trace.complete,
+            complete: snapshot.stats.complete && trace.complete && diff_scope_complete,
             coverage_notes: notes,
             duration_ms: start.elapsed().as_millis(),
         })

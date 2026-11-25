@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled repeated import questions in the existing Python import family; not independent or held out",
+  "cases": [
+    {
+      "id": "repeated-named-import-same-target",
+      "family": "python-import-symbol-scope",
+      "class": "duplicate-import-target-identity",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "symbol_names": "qualified",
+      "files": {
+        "service.py": "def helper(value):\n    return value\n",
+        "routes.py": "from service import helper as run\nfrom service import helper as run\ndef handler(value):\n    return run(value)\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "service.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "run",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            [
+              "service.py",
+              "helper"
+            ],
+            "run",
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "repeated-namespace-import-same-target",
+      "family": "python-import-symbol-scope",
+      "class": "duplicate-import-target-identity",
+      "split": "development",
+      "command": "callees",
+      "target": "handler",
+      "symbol_names": "qualified",
+      "files": {
+        "service.py": "def helper(value):\n    return value\n",
+        "routes.py": "import service as lib\nimport service as lib\ndef handler(value):\n    return lib.helper(value)\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "service.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "lib.helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "routes.py",
+              "handler"
+            ],
+            [
+              "service.py",
+              "helper"
+            ],
+            "lib.helper",
+            true
+          ]
+        ]
+      }
+    }
+  ]
+}

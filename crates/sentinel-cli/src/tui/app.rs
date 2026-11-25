@@ -71,6 +71,11 @@ pub struct App {
     pub chat_follow: bool,
     pub chat_preview: Option<String>,
     pub intelligence_text: String,
+    pub audit_history: Option<sentinel_graph::audit_workflow::AuditHistory>,
+    pub audit_revision_selected: usize,
+    pub static_jobs: Option<sentinel_graph::jobs::JobList>,
+    pub static_job_selected: usize,
+    pub static_job_detail: bool,
     pub external: bool,
     pub semgrep: String,
     pub threshold: Severity,
@@ -80,6 +85,7 @@ pub struct App {
     pub status: String,
     pub status_error: bool,
     pub job: Option<Job>,
+    pub cancel_job: Option<Job>,
     pub tick: usize,
 }
 impl App {
@@ -91,8 +97,8 @@ impl App {
             local_model:std::env::var("SENTINEL_LOCAL_MODEL").unwrap_or_else(|_|"qwen/qwen3.5-9b".into()),nim_model:std::env::var("SENTINEL_NIM_MODEL").unwrap_or_else(|_|"z-ai/glm-5.3".into()),
             question:"Explain the architecture, entry points, data flow, and testing opportunities. Cite source evidence.".into(),ai_finding:None,
             intelligence_text:"Persistent security intelligence\n\nPress g to index the repository, or w to verify the patch against a saved baseline / Git HEAD.\n\nPress u to inspect imported audit coverage and source freshness. Detailed graph and context queries are available through the repository-bound MCP server.".into(),
-            chat_history:vec![],chat_input:String::new(),chat_context:false,chat_follow:true,chat_preview:None,ai_text:"Chat with Sentinel.\n\nType a message and press Enter. Alt+m selects a provider; Alt+p attaches project evidence.\n\nLocal uses your configured LM Studio/Bionic or Ollama server. Cloud runs only NVIDIA NIM. Both runs them concurrently on identical evidence.\n\nAI answers are advisory and do not change scan findings.".into(),external:false,semgrep:String::new(),threshold:Severity::Info,editor:None,help:false,help_scroll:0,
-            status:"Ready. Press a to audit this project, or ? for the keyboard guide.".into(),status_error:false,job:None,tick:0 })
+            static_jobs:None,static_job_selected:0,static_job_detail:false,audit_history:None,audit_revision_selected:0,chat_history:vec![],chat_input:String::new(),chat_context:false,chat_follow:true,chat_preview:None,ai_text:"Chat with Sentinel.\n\nType a message and press Enter. Alt+m selects a provider; Alt+p attaches project evidence.\n\nLocal uses your configured LM Studio/Bionic or Ollama server. Cloud runs only NVIDIA NIM. Both runs them concurrently on identical evidence.\n\nAI answers are advisory and do not change scan findings.".into(),external:false,semgrep:String::new(),threshold:Severity::Info,editor:None,help:false,help_scroll:0,
+            status:"Ready. Press a to audit this project, or ? for the keyboard guide.".into(),status_error:false,job:None,cancel_job:None,tick:0 })
     }
     pub fn provider_name(&self) -> &'static str {
         ["local", "nim", "both"][self.provider]
@@ -139,8 +145,11 @@ impl App {
     }
     pub fn open_editor(&mut self, kind: Edit) {
         self.navigation_focus = false;
-        if self.job.is_some() && kind != Edit::Filter {
-            self.notify("Wait for the operation, or press Esc to cancel it.", true);
+        if self.busy() && kind != Edit::Filter {
+            self.notify(
+                "Wait for the operation, or press Esc to stop the workers.",
+                true,
+            );
             return;
         }
         let value = match kind {
@@ -172,6 +181,12 @@ impl App {
                     .context("project path does not exist")?;
                 self.project = path;
                 self.report = None;
+                self.audit_history = None;
+                self.static_jobs = None;
+                self.static_job_selected = 0;
+                self.static_job_detail = false;
+                self.audit_revision_selected = 0;
+                self.intelligence_text = "Project changed. Press h to load audit history.".into();
                 self.selected = 0;
                 self.ai_finding = None;
                 self.scroll = 0;
@@ -219,9 +234,20 @@ impl App {
         }
         Ok(())
     }
+    pub fn busy(&self) -> bool {
+        self.job.is_some() || self.cancel_job.is_some()
+    }
+    pub fn can_cancel_running_job(&self) -> bool {
+        self.cancel_job.is_none()
+            && self
+                .job
+                .as_ref()
+                .is_some_and(|job| matches!(job.kind, Kind::JobResume))
+    }
     fn start(&mut self, kind: Kind) -> Result<()> {
-        if self.job.is_some() {
-            anyhow::bail!("an operation is already running; Esc cancels it");
+        let concurrent_cancel = matches!(kind, Kind::JobCancel) && self.can_cancel_running_job();
+        if self.busy() && !concurrent_cancel {
+            anyhow::bail!("an operation is already running; Esc stops the workers");
         }
         self.navigation_focus = false;
         if matches!(kind, Kind::Explain) {
@@ -259,11 +285,44 @@ impl App {
             Kind::AuditStatus => {
                 command.arg("audit-workflow").arg("status").arg(&root);
             }
+            Kind::JobStatus | Kind::JobResume | Kind::JobCancel => {
+                let job = self
+                    .static_jobs
+                    .as_ref()
+                    .and_then(|jobs| jobs.jobs.get(self.static_job_selected))
+                    .context("load static jobs and select a job first")?;
+                command
+                    .args([
+                        "job",
+                        match kind {
+                            Kind::JobResume => "resume",
+                            Kind::JobCancel => "cancel",
+                            _ => "status",
+                        },
+                        &job.id,
+                    ])
+                    .arg("--project")
+                    .arg(&root);
+                if matches!(kind, Kind::JobResume) {
+                    command.args(["--max-units", "1"]);
+                }
+            }
             Kind::JobList => {
                 command
                     .args(["job", "list"])
                     .arg(&root)
                     .args(["--limit", "20"]);
+            }
+            Kind::AuditRevision => {
+                let revision = self
+                    .audit_history
+                    .as_ref()
+                    .and_then(|history| history.revisions.get(self.audit_revision_selected))
+                    .context("load audit history and select a revision first")?;
+                command
+                    .args(["audit-workflow", "revision", &revision.revision_id])
+                    .arg("--project")
+                    .arg(&root);
             }
             Kind::AuditHistory => {
                 command
@@ -309,17 +368,25 @@ impl App {
                 }
             }
         }
-        self.job = Some(Job::spawn(
+        let worker = Job::spawn(
             command,
             kind,
             Duration::from_secs(
-                if matches!(kind, Kind::Audit | Kind::Diff | Kind::Index | Kind::Verify) {
+                if matches!(
+                    kind,
+                    Kind::Audit | Kind::Diff | Kind::Index | Kind::Verify | Kind::JobResume
+                ) {
                     600
                 } else {
                     210
                 },
             ),
-        )?);
+        )?;
+        if concurrent_cancel {
+            self.cancel_job = Some(worker);
+        } else {
+            self.job = Some(worker);
+        }
         self.notify(
             match kind {
                 Kind::Audit => "Auditing project...",
@@ -330,7 +397,11 @@ impl App {
                 Kind::Verify => "Verifying patch...",
                 Kind::AuditStatus => "Loading audit coverage and source freshness...",
                 Kind::AuditHistory => "Loading the latest 20 audit revisions...",
+                Kind::AuditRevision => "Loading the selected historical revision...",
                 Kind::JobList => "Loading persisted static jobs...",
+                Kind::JobStatus => "Loading stored static job details...",
+                Kind::JobResume => "Resuming at most one static unit with existing budgets...",
+                Kind::JobCancel => "Cancelling the selected static job...",
             },
             false,
         );
@@ -344,12 +415,48 @@ impl App {
                 }
                 let jobs: sentinel_graph::jobs::JobList =
                     serde_json::from_slice(&completed.stdout)?;
-                self.intelligence_text = render_jobs(&jobs);
+                self.audit_history = None;
+                self.static_job_selected = 0;
+                self.static_job_detail = false;
+                self.intelligence_text = render_jobs(&jobs, 0);
+                self.static_jobs = Some(jobs);
+                self.navigation_focus = false;
                 self.view = View::Intelligence;
                 self.scroll = 0;
                 self.notify(
                     "Stored jobs loaded; no work resumed and source freshness remains unchecked.",
                     false,
+                );
+            }
+            Kind::JobStatus | Kind::JobResume | Kind::JobCancel => {
+                let job: sentinel_graph::jobs::ScanJob = serde_json::from_slice(&completed.stdout)
+                    .with_context(|| {
+                        format!("Static job command failed: {}", safe(&completed.stderr))
+                    })?;
+                let selected = self
+                    .static_jobs
+                    .as_ref()
+                    .and_then(|jobs| jobs.jobs.get(self.static_job_selected))
+                    .context("static job selection is unavailable")?;
+                if selected.id != job.id {
+                    anyhow::bail!("static job response differs from the selected job");
+                }
+                self.static_job_detail = true;
+                self.intelligence_text = format!("STATIC JOB DETAILS / STORED STATE\nCompletion is not a clean security verdict. Status/cancel do not check source freshness.\nResume checks source and detector identity; budgets cannot increase.\n r resume one unit / C cancel / o reload jobs\nEsc stops the UI worker; interrupted Running jobs need explicit CLI recovery.\n\n{}", safe(&serde_json::to_string_pretty(&job)?));
+                self.view = View::Intelligence;
+                self.navigation_focus = false;
+                self.scroll = 0;
+                self.notify(
+                    format!(
+                        "Static job state: {:?}. Recorded results remain candidates.",
+                        job.state
+                    ),
+                    matches!(
+                        job.state,
+                        sentinel_graph::jobs::JobState::Failed
+                            | sentinel_graph::jobs::JobState::Stale
+                            | sentinel_graph::jobs::JobState::BudgetExhausted
+                    ),
                 );
             }
             Kind::AuditHistory => {
@@ -358,12 +465,42 @@ impl App {
                 }
                 let history: sentinel_graph::audit_workflow::AuditHistory =
                     serde_json::from_slice(&completed.stdout)?;
-                self.intelligence_text = render_audit_history(&history);
+                self.static_jobs = None;
+                self.audit_revision_selected = 0;
+                self.intelligence_text = render_audit_history(&history, 0);
+                self.audit_history = Some(history);
+                self.navigation_focus = false;
                 self.view = View::Intelligence;
                 self.scroll = 0;
                 self.notify("Audit history loaded. Historical source freshness is unchecked; u checks the latest audit.", false);
             }
+            Kind::AuditRevision => {
+                if completed.code != 0 {
+                    anyhow::bail!("Audit revision failed: {}", safe(&completed.stderr));
+                }
+                let detail: sentinel_graph::audit_workflow::AuditRevisionDetail =
+                    serde_json::from_slice(&completed.stdout)?;
+                let selected = self
+                    .audit_history
+                    .as_ref()
+                    .and_then(|history| history.revisions.get(self.audit_revision_selected))
+                    .context("no audit revision selected")?;
+                if detail.revision_id != selected.revision_id {
+                    anyhow::bail!("audit response does not match the selected revision");
+                }
+                self.intelligence_text = format!("HISTORICAL IMPORTED AUDIT\nSOURCE FRESHNESS: UNCHECKED\nEXECUTION: UNOBSERVED\nImported attestations; no current security verdict. Press h to return to history.\n\n{}", safe(&serde_json::to_string_pretty(&detail)?));
+                self.audit_history = None;
+                self.view = View::Intelligence;
+                self.navigation_focus = false;
+                self.scroll = 0;
+                self.notify(
+                    "Historical revision loaded. No source refresh or latest revision change.",
+                    false,
+                );
+            }
             Kind::Index | Kind::Verify | Kind::AuditStatus => {
+                self.static_jobs = None;
+                self.audit_history = None;
                 let value: serde_json::Value = serde_json::from_slice(&completed.stdout)
                     .with_context(|| {
                         format!("Security operation failed: {}", safe(&completed.stderr))
@@ -512,8 +649,43 @@ impl App {
         }
         Ok(())
     }
+    fn finish_cancellation(&mut self, completed: Completed) -> Result<()> {
+        let record: sentinel_graph::jobs::ScanJob = serde_json::from_slice(&completed.stdout)
+            .with_context(|| {
+                format!(
+                    "Static job cancellation failed: {}",
+                    safe(&completed.stderr)
+                )
+            })?;
+        let cancelled = record.state == sentinel_graph::jobs::JobState::Cancelled;
+        // Validate the response identity before stopping the admitted resume worker.
+        self.complete(completed)?;
+        if cancelled
+            && self
+                .job
+                .as_ref()
+                .is_some_and(|job| matches!(job.kind, Kind::JobResume))
+        {
+            self.job.take();
+        }
+        Ok(())
+    }
     pub fn tick(&mut self) {
         self.tick = self.tick.wrapping_add(1);
+        let cancellation = self.cancel_job.as_mut().map(Job::poll);
+        match cancellation {
+            Some(Ok(Some(completed))) => {
+                self.cancel_job.take();
+                if let Err(e) = self.finish_cancellation(completed) {
+                    self.notify(format!("{e:#}"), true);
+                }
+            }
+            Some(Err(e)) => {
+                self.cancel_job.take();
+                self.notify(format!("{e:#}"), true);
+            }
+            _ => {}
+        }
         let result = self.job.as_mut().map(Job::poll);
         match result {
             Some(Ok(Some(completed))) => {
@@ -531,6 +703,7 @@ impl App {
     }
     pub fn key(&mut self, key: KeyEvent) -> bool {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+            self.cancel_job.take();
             self.job.take();
             return true;
         }
@@ -578,6 +751,7 @@ impl App {
                 KeyCode::PageUp => self.help_scroll = self.help_scroll.saturating_sub(8),
                 KeyCode::Home => self.help_scroll = 0,
                 KeyCode::Char('q') | KeyCode::Char('Q') => {
+                    self.cancel_job.take();
                     self.job.take();
                     return true;
                 }
@@ -612,7 +786,7 @@ impl App {
                     return false;
                 }
                 KeyCode::Enter => {
-                    if self.job.is_none() && !self.chat_input.trim().is_empty() {
+                    if !self.busy() && !self.chat_input.trim().is_empty() {
                         self.question = self.chat_input.clone();
                         match self.start(Kind::Explain) {
                             Ok(()) => self.chat_input.clear(),
@@ -638,12 +812,12 @@ impl App {
         }
         if self.view == View::Ai && key.modifiers.contains(KeyModifiers::ALT) {
             match key.code {
-                KeyCode::Char('p') if self.job.is_none() => {
+                KeyCode::Char('p') if !self.busy() => {
                     self.chat_context = !self.chat_context;
                     self.ai_finding = None;
                     return false;
                 }
-                KeyCode::Char('r') if self.job.is_none() => {
+                KeyCode::Char('r') if !self.busy() => {
                     self.chat_history.clear();
                     self.chat_input.clear();
                     self.chat_preview = None;
@@ -657,6 +831,7 @@ impl App {
         }
         let action: Result<()> = match key.code {
             KeyCode::Char('q') | KeyCode::Char('Q') => {
+                self.cancel_job.take();
                 self.job.take();
                 return true;
             }
@@ -664,7 +839,8 @@ impl App {
                 if self.chat_preview.take().is_some() {
                     return false;
                 }
-                if self.job.take().is_some() {
+                let stopped_cancel = self.cancel_job.take().is_some();
+                if self.job.take().is_some() || stopped_cancel {
                     self.notify(
                         "Operation stopped. Scan writes already committed remain in history.",
                         false,
@@ -701,6 +877,12 @@ impl App {
                 self.scroll = 0;
                 Ok(())
             }
+            KeyCode::Char('r') if self.view == View::Intelligence && self.static_jobs.is_some() => {
+                self.start(Kind::JobResume)
+            }
+            KeyCode::Char('C') if self.view == View::Intelligence && self.static_jobs.is_some() => {
+                self.start(Kind::JobCancel)
+            }
             KeyCode::Char('g') => self.start(Kind::Index),
             KeyCode::Char('w') => self.start(Kind::Verify),
             KeyCode::Char('u') => self.start(Kind::AuditStatus),
@@ -734,12 +916,12 @@ impl App {
                 self.open_editor(Edit::Semgrep);
                 Ok(())
             }
-            KeyCode::Char('m') if self.job.is_none() => {
+            KeyCode::Char('m') if !self.busy() => {
                 self.provider = (self.provider + 1) % 3;
                 self.notify(format!("AI provider: {}. Cloud context is sent only when you submit an explanation.",self.provider_name()),false);
                 Ok(())
             }
-            KeyCode::Char('x') if self.job.is_none() => {
+            KeyCode::Char('x') if !self.busy() => {
                 self.external = !self.external;
                 self.notify(
                     format!(
@@ -750,7 +932,7 @@ impl App {
                 );
                 Ok(())
             }
-            KeyCode::Char('t') if self.job.is_none() => {
+            KeyCode::Char('t') if !self.busy() => {
                 self.threshold = match self.threshold {
                     Severity::Info => Severity::Low,
                     Severity::Low => Severity::Medium,
@@ -767,7 +949,7 @@ impl App {
                 );
                 Ok(())
             }
-            KeyCode::Char('c') => {
+            KeyCode::Char('c') if !self.busy() => {
                 self.navigation_focus = false;
                 self.ai_finding = None;
                 self.chat_context = true;
@@ -781,7 +963,7 @@ impl App {
                 );
                 Ok(())
             }
-            KeyCode::Char('e') if self.view == View::Findings => {
+            KeyCode::Char('e') if self.view == View::Findings && !self.busy() => {
                 if let Some(f) = self.selected_finding() {
                     let id = f.id.clone();
                     let title = f.title.clone();
@@ -813,6 +995,12 @@ impl App {
                 self.scroll = 0;
                 Ok(())
             }
+            KeyCode::Enter if self.view == View::Intelligence && self.audit_history.is_some() => {
+                self.start(Kind::AuditRevision)
+            }
+            KeyCode::Enter if self.view == View::Intelligence && self.static_jobs.is_some() => {
+                self.start(Kind::JobStatus)
+            }
             KeyCode::Enter if self.view == View::Overview => self.start(Kind::Audit),
             KeyCode::Enter if self.view == View::Ai => self.start(Kind::Explain),
             KeyCode::Char('s') => {
@@ -837,6 +1025,25 @@ impl App {
                         self.rule_selected =
                             (self.rule_selected + 1).min(self.rules.len().saturating_sub(1))
                     }
+                    View::Intelligence if self.audit_history.is_some() && !self.busy() => {
+                        let history = self.audit_history.as_ref().unwrap();
+                        self.audit_revision_selected = (self.audit_revision_selected + 1)
+                            .min(history.revisions.len().saturating_sub(1));
+                        self.intelligence_text =
+                            render_audit_history(history, self.audit_revision_selected);
+                        self.scroll = 0;
+                    }
+                    View::Intelligence
+                        if self.static_jobs.is_some()
+                            && !self.static_job_detail
+                            && !self.busy() =>
+                    {
+                        let jobs = self.static_jobs.as_ref().unwrap();
+                        self.static_job_selected =
+                            (self.static_job_selected + 1).min(jobs.jobs.len().saturating_sub(1));
+                        self.intelligence_text = render_jobs(jobs, self.static_job_selected);
+                        self.scroll = 0;
+                    }
                     _ => self.scroll = self.scroll.saturating_add(1),
                 }
                 if matches!(self.view, View::Findings | View::Rules) {
@@ -852,6 +1059,27 @@ impl App {
                 match self.view {
                     View::Findings => self.selected = self.selected.saturating_sub(1),
                     View::Rules => self.rule_selected = self.rule_selected.saturating_sub(1),
+                    View::Intelligence if self.audit_history.is_some() && !self.busy() => {
+                        self.audit_revision_selected =
+                            self.audit_revision_selected.saturating_sub(1);
+                        self.intelligence_text = render_audit_history(
+                            self.audit_history.as_ref().unwrap(),
+                            self.audit_revision_selected,
+                        );
+                        self.scroll = 0;
+                    }
+                    View::Intelligence
+                        if self.static_jobs.is_some()
+                            && !self.static_job_detail
+                            && !self.busy() =>
+                    {
+                        self.static_job_selected = self.static_job_selected.saturating_sub(1);
+                        self.intelligence_text = render_jobs(
+                            self.static_jobs.as_ref().unwrap(),
+                            self.static_job_selected,
+                        );
+                        self.scroll = 0;
+                    }
                     _ => self.scroll = self.scroll.saturating_sub(1),
                 }
                 if matches!(self.view, View::Findings | View::Rules) {
@@ -871,6 +1099,20 @@ impl App {
                 self.scroll = 0;
                 self.selected = 0;
                 self.rule_selected = 0;
+                if self.view == View::Intelligence {
+                    if !self.static_job_detail && !self.busy() {
+                        self.static_job_selected = 0;
+                        if let Some(jobs) = &self.static_jobs {
+                            self.intelligence_text = render_jobs(jobs, 0);
+                        }
+                    }
+                    if !self.busy() {
+                        self.audit_revision_selected = 0;
+                        if let Some(history) = &self.audit_history {
+                            self.intelligence_text = render_audit_history(history, 0);
+                        }
+                    }
+                }
                 Ok(())
             }
             _ => Ok(()),
@@ -900,9 +1142,17 @@ impl App {
         }
     }
 }
-fn render_jobs(list: &sentinel_graph::jobs::JobList) -> String {
+fn render_jobs(list: &sentinel_graph::jobs::JobList, selected: usize) -> String {
     let mut text = String::from("STATIC SCAN JOBS / NEWEST FIRST\nSOURCE FRESHNESS: UNCHECKED\nStored state only. Completed does not mean no vulnerabilities or current-source coverage.\nTime budgets are soft checks between work units. No target code or AI is executed.\n\n");
-    for job in &list.jobs {
+    text.push_str("Arrows / j / k select; Enter details; r resumes one unit; C cancels.\n\n");
+    if !list.jobs.is_empty() {
+        text.push_str(&format!(
+            "Selected job {} of {}\n\n",
+            selected + 1,
+            list.jobs.len()
+        ));
+    }
+    if let Some(job) = list.jobs.get(selected) {
         text.push_str(&format!("{:?} / {}\n  Created: {}\n  Units recorded: {}/{} | Attempts reserved: {}/{}\n  Elapsed: {} / {} ms | Active file: {}\n  Snapshot: {}\n\n",job.state,safe(&job.id),safe(&job.created_at),job.units_recorded,job.total_files,job.attempts_reserved,job.max_attempts,job.elapsed_ms,job.max_elapsed_ms,safe(job.active_file.as_deref().unwrap_or("none")),safe(&job.source_snapshot)));
     }
     if list.jobs.is_empty() {
@@ -914,12 +1164,22 @@ fn render_jobs(list: &sentinel_graph::jobs::JobList) -> String {
     text.push_str("Inspect: sentinel job status <id>\nResume explicitly: sentinel job resume <id> --max-units 1\nCancel: sentinel job cancel <id>\nRun these commands from this project, or supply --project <path>.\n");
     text
 }
-fn render_audit_history(history: &sentinel_graph::audit_workflow::AuditHistory) -> String {
-    let mut text = String::from("AUDIT REVISION HISTORY\nNewest imports first / at most 20 revisions\n\nSOURCE FRESHNESS: UNCHECKED\nLatest means the current imported revision, not current source or a security verdict.\nReviewer identities and verdicts are imported attestations.\nPress u to check coverage and freshness of the latest audit.\n\n");
+fn render_audit_history(
+    history: &sentinel_graph::audit_workflow::AuditHistory,
+    selected: usize,
+) -> String {
+    let mut text = String::from("AUDIT REVISION HISTORY\nNewest imports first / at most 20 revisions\n\nSOURCE FRESHNESS: UNCHECKED\nLatest means the current imported revision, not current source or a security verdict.\nReviewer identities and verdicts are imported attestations.\nPress u to check coverage and freshness of the latest audit.\nArrows / j / k select a revision; Enter opens retained details.\n\n");
     if history.revisions.is_empty() {
         text.push_str("No retained audit revisions for this project.\n");
     }
-    for revision in &history.revisions {
+    if !history.revisions.is_empty() {
+        text.push_str(&format!(
+            "Selected revision {} of {}\n\n",
+            selected + 1,
+            history.revisions.len()
+        ));
+    }
+    if let Some(revision) = history.revisions.get(selected) {
         text.push_str(&format!(
             "{}{} / {}\n  Imported: {}\n  Revision: {}\n  Source snapshot: {}\n\n",
             if revision.is_latest { "[LATEST] " } else { "" },
@@ -952,7 +1212,7 @@ mod chat_tests {
             has_more: false,
             source_freshness_checked: false,
         };
-        let text = render_jobs(&empty);
+        let text = render_jobs(&empty, 0);
         assert!(text.contains("SOURCE FRESHNESS: UNCHECKED"));
         assert!(text.contains("Completed does not mean no vulnerabilities"));
         assert!(text.contains("No persisted static jobs"));
@@ -973,7 +1233,7 @@ mod chat_tests {
             has_more: true,
             source_freshness_checked: false,
         };
-        let rendered = render_audit_history(&history);
+        let rendered = render_audit_history(&history, 0);
         assert!(rendered.contains("SOURCE FRESHNESS: UNCHECKED"));
         assert!(rendered.contains("[LATEST] run-1"));
         assert!(rendered.contains("sha256:abc"));
@@ -983,12 +1243,356 @@ mod chat_tests {
             has_more: false,
             source_freshness_checked: false,
         };
-        assert!(render_audit_history(&empty).contains("No retained audit revisions"));
+        assert!(render_audit_history(&empty, 0).contains("No retained audit revisions"));
     }
+    #[test]
+    fn job_selection_and_pending_details_preserve_budgets_and_explicit_actions() {
+        let mut app = App::new(std::env::current_dir().unwrap()).unwrap();
+        let jobs = serde_json::json!({"jobs":(0..2).map(|i| serde_json::json!({
+            "id":if i == 0 {"a".repeat(64)} else {"b".repeat(64)}, "state":"pending", "created_at":"today",
+            "source_snapshot":"snapshot", "units_recorded":0, "total_files":2,
+            "attempts_reserved":0, "max_attempts":2, "elapsed_ms":0, "max_elapsed_ms":60000, "active_file":null
+        })).collect::<Vec<_>>(), "has_more":false, "source_freshness_checked":false});
+        app.complete(Completed {
+            kind: Kind::JobList,
+            code: 0,
+            stdout: serde_json::to_vec(&jobs).unwrap(),
+            stderr: String::new(),
+        })
+        .unwrap();
+        assert!(!app.navigation_focus);
+        for _ in 0..3 {
+            app.key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        }
+        assert_eq!(app.static_job_selected, 1);
+        assert!(app.intelligence_text.contains("Selected job 2 of 2"));
+        #[cfg(windows)]
+        let mut command = Command::new("cmd.exe");
+        #[cfg(windows)]
+        command.args(["/c", "exit", "0"]);
+        #[cfg(unix)]
+        let mut command = Command::new("sh");
+        #[cfg(unix)]
+        command.args(["-c", "exit 0"]);
+        // An owned, harmless OS child keeps the UI in worker mode; no target code.
+        app.job = Some(Job::spawn(command, Kind::JobResume, Duration::from_secs(5)).unwrap());
+        app.key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        app.key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        assert_eq!(app.static_job_selected, 1);
+        app.job.take();
+        let pending = serde_json::json!({"schema_version":1,"id":"b".repeat(64),"project_id":"test",
+            "source_snapshot":"snapshot","source_manifest":{"a.py":"hash","b.py":"hash"},"detector_id":"detector",
+            "state":"pending","max_attempts":2,"attempts_reserved":1,"max_elapsed_ms":60000,"elapsed_ms":10,
+            "active_file":null,"results":[],"notes":[]});
+        app.complete(Completed {
+            kind: Kind::JobResume,
+            code: 2,
+            stdout: serde_json::to_vec(&pending).unwrap(),
+            stderr: String::new(),
+        })
+        .unwrap();
+        assert!(app.static_job_detail);
+        assert!(!app.status_error);
+        assert!(app
+            .intelligence_text
+            .contains("Completion is not a clean security verdict"));
+        assert!(app.intelligence_text.contains("\"attempts_reserved\": 1"));
+        assert!(app.intelligence_text.contains("\"max_attempts\": 2"));
+        let mut wrong = pending.clone();
+        wrong["id"] = serde_json::json!("a".repeat(64));
+        let text = app.intelligence_text.clone();
+        assert!(app
+            .complete(Completed {
+                kind: Kind::JobStatus,
+                code: 0,
+                stdout: serde_json::to_vec(&wrong).unwrap(),
+                stderr: String::new()
+            })
+            .is_err());
+        assert_eq!(app.intelligence_text, text);
+        assert_eq!(app.static_job_selected, 1);
+        app.key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        assert_eq!(app.static_job_selected, 1);
+        let empty =
+            serde_json::json!({"jobs":[],"has_more":false,"source_freshness_checked":false});
+        app.complete(Completed {
+            kind: Kind::JobList,
+            code: 0,
+            stdout: serde_json::to_vec(&empty).unwrap(),
+            stderr: String::new(),
+        })
+        .unwrap();
+        app.key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+        assert!(app.job.is_none());
+        assert!(app.status_error);
+        app.key(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::NONE));
+        assert!(app.job.is_none());
+        app.editor = Some(Editor {
+            kind: Edit::Project,
+            value: app.project.to_string_lossy().into(),
+        });
+        app.accept_editor().unwrap();
+        assert!(app.static_jobs.is_none());
+        assert!(!app.static_job_detail);
+    }
+
+    #[test]
+    fn audit_history_selection_is_bounded_and_details_preserve_advisory_labels() {
+        use sentinel_graph::audit_workflow::{AuditHistory, AuditRevision};
+        let mut app = App::new(std::env::current_dir().unwrap()).unwrap();
+        let history = AuditHistory {
+            revisions: (0..2)
+                .map(|index| AuditRevision {
+                    revision_id: if index == 0 {
+                        "a".repeat(64)
+                    } else {
+                        "b".repeat(64)
+                    },
+                    run_id: format!("run-{index}"),
+                    source_snapshot: "snapshot".into(),
+                    run_status: "incomplete".into(),
+                    imported_at: "today".into(),
+                    is_latest: index == 0,
+                })
+                .collect(),
+            has_more: false,
+            source_freshness_checked: false,
+        };
+        app.complete(Completed {
+            kind: Kind::AuditHistory,
+            code: 0,
+            stdout: serde_json::to_vec(&history).unwrap(),
+            stderr: String::new(),
+        })
+        .unwrap();
+        assert!(!app.navigation_focus);
+        assert!(app.intelligence_text.contains("Selected revision 1 of 2"));
+        for _ in 0..3 {
+            app.key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        }
+        assert_eq!(app.audit_revision_selected, 1);
+        assert!(app.intelligence_text.contains("run-1"));
+        assert!(!app.intelligence_text.contains("[LATEST] run-0"));
+        #[cfg(windows)]
+        let mut command = Command::new("cmd.exe");
+        #[cfg(windows)]
+        command.args(["/c", "exit", "0"]);
+        #[cfg(unix)]
+        let mut command = Command::new("sh");
+        #[cfg(unix)]
+        command.args(["-c", "exit 0"]);
+        app.job = Some(Job::spawn(command, Kind::AuditRevision, Duration::from_secs(5)).unwrap());
+        app.key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        app.key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        assert_eq!(app.audit_revision_selected, 1);
+        app.job.take();
+        app.key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        assert_eq!(app.audit_revision_selected, 0);
+        app.key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        assert_eq!(app.audit_revision_selected, 0);
+        let run = serde_json::json!({"metadata":{
+            "run_id":"run-0", "repo":"test", "target":app.root(), "source_ref":"unknown",
+            "source_snapshot":"snapshot", "source_manifest":{}, "include_paths":[], "snapshot_notes":[],
+            "profile":"quick", "scope_paths":[], "budget":null, "execution_policy":"imported",
+            "upstream_revision":"unknown", "run_status":"incomplete", "selected_companion_files":[],
+            "prior_run_paths":[], "shared_file_owners":{}, "incomplete_reason":"no independent review"
+        }, "coverage":[], "findings":[], "verification":[]});
+        let detail = serde_json::json!({"revision_id":"a".repeat(64), "source_freshness_checked":false, "execution_observed":false, "run":run});
+        let mut mismatched = detail.clone();
+        mismatched["revision_id"] = serde_json::json!("b".repeat(64));
+        let prior_text = app.intelligence_text.clone();
+        assert!(app
+            .complete(Completed {
+                kind: Kind::AuditRevision,
+                code: 0,
+                stdout: serde_json::to_vec(&mismatched).unwrap(),
+                stderr: String::new(),
+            })
+            .unwrap_err()
+            .to_string()
+            .contains("does not match"));
+        assert_eq!(app.intelligence_text, prior_text);
+        assert!(app.audit_history.is_some());
+        assert_eq!(app.audit_revision_selected, 0);
+        app.complete(Completed {
+            kind: Kind::AuditRevision,
+            code: 0,
+            stdout: serde_json::to_vec(&detail).unwrap(),
+            stderr: String::new(),
+        })
+        .unwrap();
+        assert!(app.audit_history.is_none());
+        assert!(app
+            .intelligence_text
+            .contains("SOURCE FRESHNESS: UNCHECKED"));
+        assert!(app.intelligence_text.contains("EXECUTION: UNOBSERVED"));
+        assert!(app.intelligence_text.contains("run-0"));
+        assert!(app.intelligence_text.contains("Press h to return"));
+        // Empty history never selects or starts an invalid revision read.
+        let empty = AuditHistory {
+            revisions: vec![],
+            has_more: false,
+            source_freshness_checked: false,
+        };
+        app.complete(Completed {
+            kind: Kind::AuditHistory,
+            code: 0,
+            stdout: serde_json::to_vec(&empty).unwrap(),
+            stderr: String::new(),
+        })
+        .unwrap();
+        app.key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(app.job.is_none());
+        assert!(app.status_error);
+        app.editor = Some(Editor {
+            kind: Edit::Project,
+            value: app.project.to_string_lossy().into(),
+        });
+        app.accept_editor().unwrap();
+        assert!(app.audit_history.is_none());
+        assert_eq!(app.audit_revision_selected, 0);
+        assert!(app.intelligence_text.contains("Project changed"));
+    }
+
+    fn owned_idle_worker(kind: Kind) -> Job {
+        #[cfg(windows)]
+        let mut command = Command::new("cmd.exe");
+        #[cfg(windows)]
+        command.args(["/c", "exit", "0"]);
+        #[cfg(unix)]
+        let mut command = Command::new("sh");
+        #[cfg(unix)]
+        command.args(["-c", "exit 0"]);
+        Job::spawn(command, kind, Duration::from_secs(5)).unwrap()
+    }
+
+    fn cancellation_app() -> App {
+        let mut app = App::new(std::env::current_dir().unwrap()).unwrap();
+        let jobs = serde_json::json!({"jobs":[{
+            "id":"a".repeat(64), "state":"running", "created_at":"today",
+            "source_snapshot":"snapshot", "units_recorded":0, "total_files":2,
+            "attempts_reserved":1, "max_attempts":2, "elapsed_ms":0,
+            "max_elapsed_ms":60000, "active_file":"a.py"
+        }], "has_more":false, "source_freshness_checked":false});
+        app.complete(Completed {
+            kind: Kind::JobList,
+            code: 0,
+            stdout: serde_json::to_vec(&jobs).unwrap(),
+            stderr: String::new(),
+        })
+        .unwrap();
+        app.job = Some(owned_idle_worker(Kind::JobResume));
+        app
+    }
+
+    fn cancellation_record(state: &str, id: &str) -> Completed {
+        let mut record = serde_json::json!({"schema_version":1,"id":id,"project_id":"test",
+            "source_snapshot":"snapshot","source_manifest":{"a.py":"hash","b.py":"hash"},
+            "detector_id":"detector", "state":state,"max_attempts":2,"attempts_reserved":1,
+            "max_elapsed_ms":60000,"elapsed_ms":10,"active_file":"a.py","results":[],"notes":[]});
+        if state == "completed" {
+            record["active_file"] = serde_json::Value::Null;
+            record["attempts_reserved"] = serde_json::json!(2);
+            record["results"] = serde_json::json!(["a.py", "b.py"].map(|file| serde_json::json!({
+                "file":file, "outcome":sentinel_core::ScanOutcome::Complete, "finding_count":0,
+                "finding_ids":[], "omitted_ids":0, "coverage_notes":[]
+            })));
+        }
+        Completed {
+            kind: Kind::JobCancel,
+            code: 0,
+            stdout: serde_json::to_vec(&record).unwrap(),
+            stderr: String::new(),
+        }
+    }
+
+    #[test]
+    fn concurrent_cancellation_is_the_only_second_worker_and_escape_stops_both() {
+        let mut app = cancellation_app();
+        assert!(app.can_cancel_running_job());
+        assert!(app.start(Kind::Audit).is_err());
+        // The owned unit-test executable stands in for the CLI worker here;
+        // persisted cancellation itself is covered by graph/CLI integration tests.
+        app.start(Kind::JobCancel).unwrap();
+        assert!(app.job.is_some());
+        assert!(app.cancel_job.is_some());
+        assert!(!app.can_cancel_running_job());
+        assert!(app.start(Kind::JobCancel).is_err());
+        app.job.take(); // Primary completion must not unlock project/settings changes.
+        assert!(app.busy());
+        app.open_editor(Edit::Project);
+        assert!(app.editor.is_none());
+        assert!(app.start(Kind::JobResume).is_err());
+        app.job = Some(owned_idle_worker(Kind::JobResume));
+        app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(!app.busy());
+    }
+
+    #[test]
+    fn acknowledged_cancellation_stops_resume_and_invalid_records_do_not() {
+        let mut app = cancellation_app();
+        let prior_text = app.intelligence_text.clone();
+        assert!(app
+            .finish_cancellation(cancellation_record("cancelled", &"b".repeat(64)))
+            .is_err());
+        assert_eq!(app.intelligence_text, prior_text);
+        assert!(app.job.is_some());
+        assert!(app
+            .finish_cancellation(Completed {
+                kind: Kind::JobCancel,
+                code: 2,
+                stdout: vec![],
+                stderr: "cancel failed".into()
+            })
+            .is_err());
+        assert!(app.job.is_some());
+        app.finish_cancellation(cancellation_record("cancelled", &"a".repeat(64)))
+            .unwrap();
+        assert!(!app.busy());
+        assert!(app.status.contains("Cancelled"));
+        assert!(app.intelligence_text.contains("\"attempts_reserved\": 1"));
+        assert!(app.intelligence_text.contains("\"max_attempts\": 2"));
+    }
+
+    #[test]
+    fn completion_before_cancellation_preserves_the_actual_terminal_state() {
+        let mut app = cancellation_app();
+        app.finish_cancellation(cancellation_record("completed", &"a".repeat(64)))
+            .unwrap();
+        assert!(app.job.is_some());
+        assert!(app.status.contains("Completed"));
+        assert!(!app.status.contains("Cancelled"));
+        app.job.take();
+        app.finish_cancellation(cancellation_record("cancelled", &"a".repeat(64)))
+            .unwrap();
+        assert!(app.status.contains("Cancelled"));
+    }
+
     #[test]
     fn responses_are_retained_and_preview_preserves_conversation() {
         let mut app = App::new(std::env::current_dir().unwrap()).unwrap();
         app.question = "Compare these approaches".into();
+        #[cfg(windows)]
+        let mut command = Command::new("cmd.exe");
+        #[cfg(windows)]
+        command.args(["/c", "exit", "0"]);
+        #[cfg(unix)]
+        let mut command = Command::new("sh");
+        #[cfg(unix)]
+        command.args(["-c", "exit 0"]);
+        app.job = Some(Job::spawn(command, Kind::Explain, Duration::from_secs(5)).unwrap());
+        app.key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
+        assert_eq!(app.question, "Compare these approaches");
+        assert!(!app.chat_context);
+        app.view = View::Ai;
+        app.navigation_focus = false;
+        app.key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::ALT));
+        assert_eq!(app.question, "Compare these approaches");
+        // Drafting the next message is allowed without relabelling the pending answer.
+        app.key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        assert_eq!(app.chat_input, "x");
+        app.job.take();
         let output = serde_json::json!({"context_id":"test", "responses":[{"provider":"ollama","model":"local","text":"First answer"},{"provider":"nvidia-nim","model":"cloud","text":"Second answer"}], "failures":[], "coverage_notes":[]});
         app.complete(Completed {
             kind: Kind::Explain,
@@ -998,6 +1602,7 @@ mod chat_tests {
         })
         .unwrap();
         assert_eq!(app.chat_history.len(), 2);
+        assert_eq!(app.chat_history[0].content, "Compare these approaches");
         assert!(app.chat_history[1].content.contains("First answer"));
         assert!(app.chat_history[1].content.contains("Second answer"));
         let transcript = app.ai_text.clone();

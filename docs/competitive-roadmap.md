@@ -3,8 +3,9 @@
 See the [competitive gap backlog](competitive-gap-backlog.md) for concrete
 deliverables and acceptance evidence against the current Nox/Joern comparison.
 
-Status: implementation started. The Phase 0 CLI benchmark harness and 14-case
-development seed, plus initial Phase 1 evidence and audit persistence, are implemented.
+Status: implementation started. Phase 0 has 68 development detection cases and
+twenty-six authored graph/trace questions, alongside Phase 1 evidence/audit persistence.
+These are development checks, not independently adjudicated release evidence.
 Release gates and remaining work are tracked in [implementation status](implementation-status.md).
 See [benchmark instructions](../benchmarks/README.md). No competitive win is measured.
 
@@ -37,8 +38,9 @@ results. Any gap keeps the related claim provisional.
 
 ## Current foundation
 
-Sentinel has 22 embedded rules, bounded Tree-sitter flow interpretation, a
-persistent SQLite security graph, ranked context, baseline/diff verification,
+Sentinel has 27 embedded rules (including five provider-token candidate checks),
+bounded Tree-sitter flow interpretation, a persistent SQLite security graph,
+ranked context, baseline/diff verification,
 CLI/TUI/MCP access, and Ollama/NVIDIA NIM/both explanations. The pinned Cloudflare
 workflow adds source snapshots, coverage records, schema validation and imported
 review attestations. An external agent still performs the audit.
@@ -92,13 +94,30 @@ Extend the current engine before relying on it for autonomous investigations.
   evidence snapshots. Stale evidence must be prominently labelled everywhere.
 - Add named, bounded security queries. Do not expose SQL, shell or arbitrary
   executable graph queries through MCP.
+- Finding writes enforce a combined 1 MiB text budget before insertion/upsert;
+  reads reject oversized payloads before JSON decoding. Numeric admission rejects
+  invalid confidence/lines without clamping history. Scan persistence caps metadata
+  at 1 MiB and encoded snapshots at 8 MiB each / 16 MiB aggregate, with checked
+  counters and 128-byte identifiers. Complete-scan lifecycle resolution uses bounded
+  metadata batches inside the same transaction. Failed scan writes roll back.
+  Persisted index statistics have a 1 MiB encoded read/write boundary; status and
+  snapshots reject project/root identity mismatches before returning statistics.
+  Cached file IR must match its row's path, language and content hash before reuse;
+  contradictions abort refresh/read transactions without rewriting retained evidence.
+  Explicit `index --rebuild` replaces only the current project's derived graph cache
+  in the refresh transaction, retaining findings, baselines, jobs and audit history.
+  Snapshot edges must match their row's endpoints and relationship metadata,
+  including checked line values and canonical boolean flags.
+  Ranked context scopes active history to its graph neighborhood and rejects more
+  than 200 stored rows; general history pagination and worker resource containment
+  remain open.
 
 Exit: migrations preserve existing history; crash/restart resumes safely; graph
 answers are correct on the query corpus; larger repositories do not silently exceed scope.
 
 ## Phase 2 — Close analysis gaps and evaluate a deeper backend
 
-Native semantics revision 11 and 68 development cases are implemented. See
+Native semantics revision 18 and 68 development detection cases are implemented. See
 [backend evaluation](phase2-backend-evaluation.md) and
 [supported contracts](framework-source-contracts.md). This phase remains Started;
 independent held-out improvement and isolated backend evaluation are outstanding.
@@ -126,8 +145,8 @@ adapter ships only if it provides measurable value and has a reviewed isolation 
 
 | Suite | First implementation | Quality gate |
 |---|---|---|
-| Secrets | Provider-specific signatures, context/entropy checks, redacted evidence; optional local history scan | Realistic dummy tokens and difficult safe examples; no live credential verification by default |
-| Dependencies | Lockfile inventory, local advisory cache, explicit online refresh, version-range evaluation, SBOM export | Ecosystem/version fixtures, database timestamp and unavailable-advisory coverage warnings |
+| Secrets | Initial AWS, GitHub, Google API, Slack and npm source signatures with entropy/context filters and redacted evidence; local history scan remains future work | Realistic dummy tokens and difficult safe examples; no live credential verification by default |
+| Dependencies | Initial bounded npm package-lock v2/v3 inventory-only command; no advisory matching yet | Ecosystem/version fixtures, database timestamp and unavailable-advisory coverage warnings |
 | Infrastructure | GitHub Actions, Dockerfile, Terraform and Kubernetes policies | Distinguish exploitable conditions from hardening notes; inspect surrounding configuration |
 | AI applications | Untrusted prompt composition, unsafe output sinks, RAG tenant boundaries, sensitive embeddings and unrestricted tools | Trace a concrete affected principal/resource; avoid calling every LLM invocation vulnerable |
 | Agent configuration | Tool grants, hooks, MCP declarations, command interpolation and secret exposure | Configuration-aware analysis with source evidence; no execution of inspected hooks |

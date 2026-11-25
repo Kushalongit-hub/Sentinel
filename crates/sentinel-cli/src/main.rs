@@ -1,4 +1,5 @@
 mod audit;
+mod dependencies;
 mod diff;
 mod env_config;
 mod explain;
@@ -105,6 +106,25 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 }
+#[derive(Args)]
+struct GraphQueryArgs {
+    target: String,
+    #[arg(long, default_value = ".")]
+    project: PathBuf,
+    #[arg(long, default_value_t = 40, value_parser = clap::value_parser!(u32).range(1..=200))]
+    max_items: u32,
+}
+
+fn graph_query(args: GraphQueryArgs, callers: Option<bool>) -> anyhow::Result<i32> {
+    let engine = sentinel_graph::Engine::open(args.project)?;
+    let query = match callers {
+        Some(callers) => engine.relationships(&args.target, callers, args.max_items as usize)?,
+        None => engine.find_symbols(&args.target, args.max_items as usize)?,
+    };
+    println!("{}", serde_json::to_string_pretty(&query)?);
+    Ok(if query.index_complete { 0 } else { 2 })
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Persist, resume and cancel native static scan jobs without executing project code.
@@ -152,6 +172,11 @@ enum Commands {
         ai: AiArgs,
     },
     Rules,
+    /// Inventory npm packages from a v2/v3 package-lock without querying advisories.
+    Deps {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
     /// Plan, validate, retain and export independently reviewed security audits.
     AuditWorkflow {
         #[command(subcommand)]
@@ -161,11 +186,36 @@ enum Commands {
     Index {
         #[arg(default_value = ".")]
         path: PathBuf,
+        /// Reparse all admitted sources, replacing only this project's derived graph cache.
+        #[arg(long)]
+        rebuild: bool,
     },
     /// Show statistics from the latest repository index.
     IndexStatus {
         #[arg(default_value = ".")]
         path: PathBuf,
+    },
+    /// Retrieve ranked static security evidence around a symbol, file, line or Git diff.
+    Context(GraphQueryArgs),
+    /// Find static symbols with indexed-source provenance and explicit coverage.
+    Symbols(GraphQueryArgs),
+    /// List direct static callers; unresolved edges remain explicitly labelled.
+    Callers(GraphQueryArgs),
+    /// List direct static callees; unresolved edges remain explicitly labelled.
+    Callees(GraphQueryArgs),
+    /// Trace potential static source-to-sink paths with explicit traversal budgets.
+    Trace {
+        target: String,
+        #[arg(long, default_value = ".")]
+        project: PathBuf,
+        #[arg(long)]
+        sink: Option<String>,
+        #[arg(long, default_value_t = 8, value_parser = clap::value_parser!(u32).range(1..=32))]
+        max_call_depth: u32,
+        #[arg(long, default_value_t = 64, value_parser = clap::value_parser!(u32).range(1..=200))]
+        max_paths: u32,
+        #[arg(long, default_value_t = 10000, value_parser = clap::value_parser!(u32).range(1..=100000))]
+        max_nodes_visited: u32,
     },
     /// Serve repository-bound security tools to an MCP-compatible agent over stdio.
     Mcp {
@@ -241,6 +291,12 @@ enum AuditWorkflowCommand {
         #[arg(long)]
         output: PathBuf,
     },
+    /// Read one historical imported revision; source freshness remains unchecked.
+    Revision {
+        revision: String,
+        #[arg(long, default_value = ".")]
+        project: PathBuf,
+    },
     /// Describe retained normalized JSON for a repository-bound audit revision.
     Artifacts {
         revision: String,
@@ -314,6 +370,7 @@ fn main() {
         } => explain::explain_with_ai(finding_id, project, db, ai),
         Commands::ExplainCodebase { path, db, ai } => explain::explain_codebase(path, db, ai),
         Commands::Rules => rules::rules(),
+        Commands::Deps { path } => dependencies::inventory_npm(path),
         Commands::Job { command } => (|| -> anyhow::Result<i32> {
             use sentinel_graph::{jobs::JobState, Engine};
             let (job, executing) = match command {
@@ -380,6 +437,9 @@ fn main() {
                 AuditWorkflowCommand::ExportLegacy { path, output } => {
                     serde_json::json!({"output":Engine::open(path)?.export_legacy_audit_run(&output)?,"validated":false,"imported":false})
                 }
+                AuditWorkflowCommand::Revision { revision, project } => {
+                    serde_json::to_value(Engine::open(project)?.audit_revision(&revision)?)?
+                }
                 AuditWorkflowCommand::Artifacts { revision, project } => {
                     serde_json::to_value(Engine::open(project)?.audit_artifacts(&revision)?)?
                 }
@@ -412,8 +472,13 @@ fn main() {
             println!("{}", serde_json::to_string_pretty(&value)?);
             Ok(0)
         })(),
-        Commands::Index { path } => (|| -> anyhow::Result<i32> {
-            let stats = sentinel_graph::Engine::open(path)?.index()?;
+        Commands::Index { path, rebuild } => (|| -> anyhow::Result<i32> {
+            let engine = sentinel_graph::Engine::open(path)?;
+            let stats = if rebuild {
+                engine.rebuild_index()?
+            } else {
+                engine.index()?
+            };
             println!("{}", serde_json::to_string_pretty(&stats)?);
             Ok(if stats.complete { 0 } else { 2 })
         })(),
@@ -423,6 +488,39 @@ fn main() {
                 serde_json::to_string_pretty(&sentinel_graph::Engine::open(path)?.status()?)?
             );
             Ok(0)
+        })(),
+        Commands::Context(GraphQueryArgs {
+            target,
+            project,
+            max_items,
+        }) => (|| -> anyhow::Result<i32> {
+            let context = sentinel_graph::Engine::open(project)?
+                .get_security_context(&target, max_items as usize)?;
+            println!("{}", serde_json::to_string_pretty(&context)?);
+            Ok(if context.complete { 0 } else { 2 })
+        })(),
+        Commands::Symbols(args) => graph_query(args, None),
+        Commands::Callers(args) => graph_query(args, Some(true)),
+        Commands::Callees(args) => graph_query(args, Some(false)),
+        Commands::Trace {
+            target,
+            project,
+            sink,
+            max_call_depth,
+            max_paths,
+            max_nodes_visited,
+        } => (|| -> anyhow::Result<i32> {
+            let trace = sentinel_graph::Engine::open(project)?.trace(
+                &target,
+                sink.as_deref(),
+                sentinel_core::security::TraceLimits {
+                    max_call_depth: max_call_depth as usize,
+                    max_paths: max_paths as usize,
+                    max_nodes_visited: max_nodes_visited as usize,
+                },
+            )?;
+            println!("{}", serde_json::to_string_pretty(&trace)?);
+            Ok(if trace.complete { 0 } else { 2 })
         })(),
         Commands::Mcp { repository } => (|| -> anyhow::Result<i32> {
             tokio::runtime::Runtime::new()?.block_on(sentinel_mcp::serve(repository))?;

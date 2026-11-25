@@ -3,7 +3,13 @@
 A local-first security intelligence engine for humans and AI coding agents.
 Audit code, follow cross-function input flows, retrieve ranked security context,
 and verify patches through a persistent graph, CLI, TUI, or stdio MCP.
-The default scan uses 22 embedded rules and requires no external scanner or network.
+The default scan uses 27 embedded rules and requires no external scanner or network.
+Five provider-signature checks flag AWS, GitHub, Google API, Slack and npm token
+candidates in supported source files. Candidate values are withheld from finding
+evidence; common example/placeholder context and low-entropy matches are filtered.
+This is a narrow source-code check, not full secret scanning: it does not inspect
+Git history, environment files or every credential format, and it does not verify
+whether a candidate is active. Review results and rotate exposed credentials.
 
 Recent security checklist improvements include audit findings for permissive CORS,
 unverified JWT decoding, and explicitly enabled Python debug servers. These checks
@@ -57,6 +63,7 @@ sentinel audit /path/to/project
 sentinel audit /path/to/project --format json
 sentinel audit /path/to/project --format sarif --threshold high
 sentinel audit /path/to/file.rs
+sentinel deps /path/to/project
 sentinel rules
 sentinel tui /path/to/project
 sentinel index /path/to/project
@@ -78,6 +85,12 @@ or critical. A higher threshold changes the exit code, not the findings returned
 An incomplete scan takes precedence over findings when choosing the exit code.
 
 ## Changed-file scans
+
+`sentinel deps /path/to/project` inventories package names and versions from npm
+`package-lock.json` v2/v3. It is offline, does not create the Sentinel database,
+and makes no advisory or safety claims. Unsupported lock versions, missing package
+metadata, or input/output budget limits are marked incomplete and exit with code 2.
+Other ecosystems and advisory evaluation are not implemented yet.
 
 ```sh
 sentinel diff
@@ -110,6 +123,9 @@ Each available scanner has a separate completion result. Missing optional
 scanners are recorded as unavailable; requesting external scans with no
 applicable available scanner marks the scan incomplete. Malformed or partial
 scanner output also marks the scan incomplete while retaining valid findings.
+Scanner stderr and structured diagnostic text are omitted from reports because a
+scanner may echo repository content; failures retain the exit code and counts of
+omitted diagnostics instead.
 
 The subprocess timeout defaults to 60 seconds and is configurable with
 `--scanner-timeout`. Stdout is limited to 8 MiB and stderr to 64 KiB.
@@ -209,6 +225,17 @@ One request builds one immutable context bundle and one system/user message
 sequence. Both providers receive identical messages, including the same source
 evidence and question. The providers still have independent native token windows
 and inference state; Sentinel shares the input evidence rather than model memory.
+Before provider submission, source excerpt lines whose assignment keys look like
+passwords, secrets, tokens, API/access keys, authorization or credentials are
+replaced with a marker. A few common token prefixes (AWS access IDs, GitHub tokens,
+Slack bot tokens and Google API keys) are also redacted wherever they appear in an
+excerpt. This heuristic can miss credentials in other formats; inspect
+`--context-only` before sending sensitive projects to a cloud provider. When a
+line is redacted, the context coverage notes report the count and remind you the
+heuristic is incomplete. Finding explanations apply the same checks to textual
+finding fields, reduce recognized paths to project-relative paths (or omit
+unmatched paths), and label redactions in the prompt; the stored finding is not
+modified.
 
 ```mermaid
 flowchart TB
@@ -611,7 +638,7 @@ run in cancellable background processes, keeping navigation responsive.
 | Arrows + Enter / 1-5 | Choose and open a section / open directly |
 | a / d | Audit project / scan Git changes |
 | g / w | Index security graph / verify patch |
-| u / h / o | Latest audit coverage and freshness / 20 audit revisions / 20 persisted static jobs |
+| u / h / o | Latest audit coverage and freshness / browse 20 audit revisions (arrows select, Enter details) / browse 20 static jobs (Enter details, r resume one unit, C cancel including during resume) |
 | j / k / arrows | Select finding or rule / scroll text |
 | PageUp / PageDown / Home | Scroll evidence / reset |
 | / / p / t | Filter findings / project path / exit threshold |
@@ -659,11 +686,48 @@ unaccounted candidates, and missing confirmation attestations. Imported audits
 remain separate from deterministic scan findings and patch gates. Press `u` in
 the TUI to inspect the latest retained report and source freshness.
 
+Python call resolution excludes unrelated class/nested definitions from import
+collision checks. Import statements follow the nearest visible module/function
+scope, excluding class namespaces from method closures (analysis semantics revision
+18). Conflicting visible definitions remain unresolved. Repeated imports resolving
+to one symbol retain that target; distinct targets remain ambiguous. Runtime
+rebinding and general type dispatch remain unsupported. See
+[the native contracts](docs/framework-source-contracts.md).
+
 SQLite schema v7 retains content-addressed audit revisions and normalized coverage,
 attempts, candidates and reviews in one import transaction. Legacy records remain
 readable. Patch comparisons now include typed source manifests and candidate
 evidence with detector identity; legacy baselines lacking provenance return WARN
 until replaced with a reviewed fresh baseline.
+
+Finding writes and reads enforce a combined 1 MiB text payload limit, including
+JSON-encoded paths, components and evidence. Oversized writes fail before changing
+findings; failed scans roll back their database transaction. Matching oversized
+stored records fail context and explanation explicitly while history stays unchanged. Ranked context reads active history only from related
+files and rejects more than 200 stored findings; general history listing remains
+unbounded.
+Stored confidence must be finite and within 0–1, and line numbers must be positive
+representable integers. Invalid history fails explicitly instead of being clamped.
+Scan persistence also caps identifiers at 128 bytes, metadata at 1 MiB and finding
+snapshots at 8 MiB each / 16 MiB per scan; any overflow rolls back the scan.
+Complete-scan lifecycle updates read old finding metadata in bounded batches and
+roll back on malformed metadata.
+Persisted index statistics have a 1 MiB encoded limit. Invalid or oversized statistics
+fail status/snapshot reads explicitly, as do statistics whose project ID or
+repository path differs from the opened repository. A normal index refresh can
+rebuild them. Matching metadata identity alone does not establish source freshness.
+Cached file records must agree with their stored path, language and content hash.
+Contradictions fail snapshot reads and refresh without modifying history; unlike
+statistics, contradictory file IR is not repaired automatically.
+Use `sentinel index /path/to/project --rebuild` to explicitly replace that project's
+derived graph cache from current source. Cache replacement and indexing share one
+transaction; database failures restore the previous cache. Findings, baselines,
+jobs, audit revisions/artifacts and memory are preserved. Source limits still apply:
+incomplete rebuilds commit explicit partial coverage and exit 2. Rebuild counters
+start from an empty cache, so admitted files are reparsed rather than reused.
+Stored graph edges must also match their row's endpoints, kind, file, line, name
+and resolved flag. Contradictions fail snapshot reads; ordinary indexing rebuilds
+derived edges from file IR. These checks establish internal consistency only.
 
 See [the complete audit workflow guide](docs/audit-workflow.md) for skill export,
 coverage contracts, review records, bounds and the execution isolation requirement.
@@ -678,6 +742,11 @@ retained audit status queries.
 ```sh
 sentinel index .
 sentinel index-status .
+sentinel context create_user --project . --max-items 40
+sentinel symbols create_user --project .
+sentinel callers create_user --project .
+sentinel callees create_user --project .
+sentinel trace create_user --project . --sink sql-injection
 sentinel mcp --repository .
 ```
 
@@ -688,12 +757,38 @@ is still hashed and relationships recomputed to detect cross-file changes.
 Deleted/invalid files invalidate stale graph entries. Statistics include timings,
 changed/unchanged counts and explicit coverage notes. `index` exits 2 when partial.
 
+`context` returns the same ranked static evidence as the MCP context tool in JSON,
+including backend/source identity, selection reasons and separate target/evidence
+omission counts. Targets can be symbols, relative files, `file:line` or `diff`.
+It refreshes the persistent graph and exits 2 when analysis or requested diff scope
+is partial; bounded output omissions alone do not change a complete result's exit
+code. It does not call an AI provider. Full source reconciliation still runs on
+each request; this command does not establish an incremental latency guarantee.
+
+`symbols`, `callers` and `callees` expose the existing named static graph queries
+as JSON for shell investigations and query benchmarks. They accept the same
+`--project` and `--max-items` options as `context`. Caller/callee queries return
+direct call edges and neighboring symbols; check each edge's `resolved` flag.
+An opaque callee can remain an unresolved edge with no neighboring symbol.
+Index completeness and response omissions remain separate, with exit 2 for a
+partial index. These queries refresh the graph and do not call an AI provider.
+
+`trace` returns potential static source-to-sink paths, confidence, coverage notes
+and indexed-source identity. Use `.` as the target for all indexed paths. Optional
+`--sink` filters exact categories such as `sql-injection`, `command-injection`,
+`xss` or `path-traversal`. Traversal budgets default to `--max-call-depth 8`,
+`--max-paths 64` and `--max-nodes-visited 10000`. Exhausted/incomplete analysis
+exits 2 with JSON diagnostics. Exit 0 describes traversal completeness; paths are
+advisory candidates, and an empty filtered result is not a clean security verdict.
+
 Existing `audit` and `diff` retain their embedded per-file pipeline; `verify`
 and the MCP service add persisted repository graph and interprocedural analysis.
 
-The official Rust MCP SDK exposes ten repository-bound tools: index_project,
+The official Rust MCP SDK exposes fifteen repository-bound tools. The ten analysis tools are index_project,
 scan_file, scan_diff, get_security_context, trace_taint, explain_finding,
-verify_patch, find_symbol, get_callers and get_callees (all prefixed `sentinel_`).
+verify_patch, find_symbol, get_callers and get_callees. Five audit tools provide
+get_audit_workflow, get_audit_status, get_audit_history, get_audit_revision and
+get_audit_artifacts (all tools are prefixed `sentinel_`).
 MCP stdout contains JSON-RPC only. No MCP security tool calls an LLM or executes an
 agent-provided shell command. The agent edits code and asks Sentinel for evidence.
 
@@ -724,6 +819,10 @@ imported modules, two-hop dependencies, source/sink/guard annotations, findings,
 applicable rules, flow paths and changed files. Each item has a relevance score
 and selection reasons; bounded outputs report omissions. A rule's applicability
 or a guard's presence does not prove a vulnerability or protection.
+Uniquely resolved imports contribute dependency symbols even when no function
+is called yet. Ambiguous imports remain visible as unresolved relationships
+without guessing dependency symbols; all evidence still competes within the
+requested output limit.
 
 Repository flow supports Python, JS/TS/TSX and basic Rust AST constructs. It
 propagates arguments/returns across unambiguous local/imported calls; dynamic
@@ -731,6 +830,20 @@ receivers remain unresolved. Recognized SQL, shell, XSS and path sinks yield
 location-based evidence, sanitizer steps, guard annotations and confidence.
 It complements embedded-rule taint; it does not provide compiler-level soundness.
 Unsupported constructs, parse failures and exhausted budgets affect coverage.
+Plain Python named imports bind module-level definitions; same-named class methods
+or nested functions cannot impersonate those exports. Ambiguous module-level
+definitions remain unresolved. Dynamic exports and runtime rebinding are outside
+this bounded contract.
+Direct Python namespace calls such as `lib.helper()` also select module-level
+definitions. Calls through deeper namespace/class chains or attributes of a named
+import remain unresolved, rather than being mistaken for calls to the import itself.
+Likewise, lexical `self.helper()`/`this.helper()` resolution does not extend to
+`self.worker.helper()`/`this.worker.helper()` without evidence about that receiver.
+Python bare calls inside methods search enclosing function/module scopes while
+skipping class namespaces. Nested function bindings remain eligible.
+Symbol and caller/callee queries expose source/backend identity, `index_complete` and `coverage_notes`
+alongside `omitted_count`; an empty or truncated response cannot establish that
+no other relationships exist.
 
 ```mermaid
 erDiagram
@@ -796,15 +909,18 @@ sentinel verify . --base main
 
 Verification returns JSON with NEW, RESOLVED, UNCHANGED and REGRESSED classifications
 (as named finding arrays), changed flow paths, reasons, coverage and PASS/WARN/FAIL.
-Git comparison analyzes changed files and call neighbors against a validated commit;
-saved baselines compare the whole eligible project. Existing debt alone does not
+Git comparison analyzes changed files, transitive resolved call neighbors and
+reverse import dependencies from both graph snapshots against a validated commit;
+saved baselines compare the whole eligible project. Saved baseline JSON is capped at
+16 MiB; oversized or internally inconsistent records fail before reassessment or
+debt updates. Missing legacy provenance remains a WARN. Existing debt alone does not
 fail. A complete verification records fixes so later reintroductions are regressed.
 
 ```mermaid
 flowchart TD
     Start["Verify working tree"] --> Base{"Saved baseline<br/>and no explicit base?"}
     Base -->|yes| Saved["Compare full project with accepted debt"]
-    Base -->|no| Git["Read immutable Git base<br/>compare changes and neighbors"]
+    Base -->|no| Git["Read immutable Git base<br/>compare transitive dependencies"]
     Saved --> Classify["Classify findings and changed taint paths"]
     Git --> Classify
     Classify --> Dangerous{"New / regressed high-confidence severity<br/>or new dangerous path?"}
@@ -830,7 +946,7 @@ proof that code is safe.
 
 Create a persistent job with `sentinel job create /path/to/project`, then use its returned ID with `sentinel job resume ID --project /path/to/project --max-units 5`. Status and cancellation use `sentinel job status ID` and `sentinel job cancel ID` with the same project option. See [job scope and budget behavior](docs/static-jobs.md). These jobs do not execute target code or AI models.
 
-Use `sentinel scan-file relative/file.py --project /path/to/project` for the same rule-plus-graph scan used by MCP. Audit revision metadata is available through `sentinel audit-workflow history` and the repository-bound `sentinel_get_audit_history` MCP tool.
+Use `sentinel scan-file relative/file.py --project /path/to/project` for the same rule-plus-graph scan used by MCP. Audit revision metadata is available through `sentinel audit-workflow history` and the repository-bound `sentinel_get_audit_history` MCP tool. Read retained historical content with `sentinel audit-workflow revision REVISION_ID --project /path/to/project`; source freshness remains unchecked. MCP clients can retrieve the same retained content and descriptor metadata using `sentinel_get_audit_revision` and `sentinel_get_audit_artifacts` with a `revision_id`.
 
 Latest legacy audit records can be recovered with `sentinel audit-workflow export-legacy . --output <new-external-directory>`, then explicitly validated and imported. See [the recovery workflow](docs/audit-workflow.md#recover-the-latest-legacy-compatibility-record).
 

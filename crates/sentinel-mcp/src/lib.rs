@@ -74,6 +74,11 @@ pub struct HistoryInput {
     #[serde(default = "default_history_limit")]
     pub limit: usize,
 }
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RevisionInput {
+    pub revision_id: String,
+}
 fn default_history_limit() -> usize {
     20
 }
@@ -178,6 +183,30 @@ impl SecurityServer {
     ) -> CallToolResult {
         self.execute(None, move |engine| engine.audit_history(input.limit))
             .await
+    }
+    #[tool(
+        description = "Read one retained imported audit revision in the configured repository. Source freshness is unchecked and execution unobserved; does not promote history, execute targets, or open original artifact paths."
+    )]
+    async fn sentinel_get_audit_revision(
+        &self,
+        Parameters(input): Parameters<RevisionInput>,
+    ) -> CallToolResult {
+        self.execute(None, move |engine| {
+            engine.audit_revision(&input.revision_id)
+        })
+        .await
+    }
+    #[tool(
+        description = "Describe normalized JSON retained for one audit revision in the configured repository. Hashes refer to retained JSON, not original files or observed execution. No artifact paths are opened."
+    )]
+    async fn sentinel_get_audit_artifacts(
+        &self,
+        Parameters(input): Parameters<RevisionInput>,
+    ) -> CallToolResult {
+        self.execute(None, move |engine| {
+            engine.audit_artifacts(&input.revision_id)
+        })
+        .await
     }
     #[tool(
         description = "Incrementally index the configured repository into a local security graph. Does not execute repository code."

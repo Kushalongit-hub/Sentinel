@@ -267,7 +267,17 @@ impl Drop for Project {
 #[test]
 fn context_is_deterministic_changes_with_source_and_respects_exclusions() {
     let root = Project::new();
-    std::fs::write(root.0.join("main.rs"), "fn main() {}\n").unwrap();
+    let secret = "fixture-context-private-token-value";
+    let access_id = "AKIAFIXTUREONLY000000";
+    let source_token = "ghp_fixture_only_token_12345678901234567890";
+    let google_token = "AIzaSyD7xPq9Lm2Nv5Bc8Rk4Tz1Wh6Fg3Jd0Qa2";
+    let slack_token = "xoxb-4-1234567890-1234567890-abcdefghijklmnopqrstuv";
+    let npm_token = "npm_0123456789ABCDEF0123456789ABCDEF0123";
+    std::fs::write(
+        root.0.join("main.rs"),
+        format!("fn main() {{}}\nconst API_KEY: &str = \"{secret}\";\nconst aws_access_key_id: &str = \"{access_id}\";\nconst label = \"{source_token}\";\nconst google = \"{google_token}\";\nconst slack = \"{slack_token}\";\nconst npm = \"{npm_token}\";\n"),
+    )
+    .unwrap();
     std::fs::write(root.0.join("credentials.rs"), "SECRET").unwrap();
     std::fs::write(root.0.join(".env"), "SECRET").unwrap();
     std::fs::create_dir(root.0.join("target")).unwrap();
@@ -276,7 +286,18 @@ fn context_is_deterministic_changes_with_source_and_respects_exclusions() {
     let second = context::build_context(&root.0, "Explain main", None).unwrap();
     assert_eq!(first.snapshot_id, second.snapshot_id);
     assert_eq!(first.files.len(), 1);
-    assert!(!serde_json::to_string(&first).unwrap().contains("SECRET"));
+    let serialized = serde_json::to_string(&first).unwrap();
+    assert!(!serialized.contains("SECRET"));
+    assert!(!serialized.contains(secret));
+    assert!(!serialized.contains(access_id));
+    assert!(!serialized.contains(source_token));
+    assert!(!serialized.contains(google_token));
+    assert!(!serialized.contains(slack_token));
+    assert!(!serialized.contains(npm_token));
+    assert!(serialized.contains("REDACTED: possible secret"));
+    assert!(first.coverage_notes.iter().any(|note| {
+        note.contains("6 excerpt line(s)") && note.contains("coverage is incomplete")
+    }));
     std::fs::write(
         root.0.join("main.rs"),
         "fn main() { println!(\"changed\"); }\n",
@@ -285,6 +306,68 @@ fn context_is_deterministic_changes_with_source_and_respects_exclusions() {
     let changed = context::build_context(&root.0, "Explain main", None).unwrap();
     assert_ne!(first.snapshot_id, changed.snapshot_id);
 }
+
+#[test]
+fn finding_payload_is_redacted_without_mutating_retained_finding() {
+    let root = Project::new();
+    std::fs::write(root.0.join("main.rs"), "fn main() {}\n").unwrap();
+    let context = context::build_context(&root.0, "Explain finding", None).unwrap();
+    let marker = "fixture-finding-private-key-value";
+    let finding = sentinel_core::Finding {
+        id: "original-id".into(),
+        severity: sentinel_core::Severity::High,
+        confidence: 0.7,
+        category: "rule".into(),
+        file: root.0.join("main.rs"),
+        line: 1,
+        title: "api_key=fixture-finding-private-key-value".into(),
+        description: "Possible issue".into(),
+        execution_path: vec![],
+        affected_components: vec![],
+        evidence: vec![format!("private_key = {marker}")],
+        recommendation: "Review".into(),
+    };
+    let request = ExplanationRequest::new(&context, "Explain", Some(&finding)).unwrap();
+    let prompt = &request.messages[1].content;
+    assert!(!prompt.contains(marker));
+    assert!(prompt.contains("REDACTED: possible secret"));
+    assert!(prompt.contains("finding field line(s)"));
+    assert!(prompt.contains("main.rs"));
+    assert!(!prompt.contains(&root.0.to_string_lossy().to_string()));
+    assert_eq!(finding.evidence[0], format!("private_key = {marker}"));
+}
+
+#[test]
+fn ambiguous_finding_path_is_omitted_instead_of_guessing() {
+    let context = context::ProjectContext {
+        schema_version: 1,
+        snapshot_id: "snapshot".into(),
+        files: vec![
+            context::FileSummary {
+                path: "src/main.rs".into(),
+                language: Some("rust".into()),
+                sha256: String::new(),
+                lines: 1,
+                symbols: vec![],
+            },
+            context::FileSummary {
+                path: "tests/main.rs".into(),
+                language: Some("rust".into()),
+                sha256: String::new(),
+                lines: 1,
+                symbols: vec![],
+            },
+        ],
+        excerpts: vec![],
+        coverage_notes: vec![],
+    };
+
+    assert_eq!(
+        super::relative_finding_path(std::path::Path::new("/outside/main.rs"), &context),
+        None
+    );
+}
+
 #[test]
 fn context_budget_preserves_focused_source_lines() {
     let root = Project::new();

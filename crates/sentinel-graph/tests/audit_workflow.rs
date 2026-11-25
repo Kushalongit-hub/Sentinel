@@ -8,12 +8,16 @@ struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
         let path = std::env::temp_dir().join(format!(
-            "sentinel-audit-test-{}-{}",
+            "sentinel-audit-test-{}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            {
+                static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            }
         ));
         std::fs::create_dir(&path).unwrap();
         std::fs::create_dir(path.join("repo")).unwrap();
@@ -309,7 +313,7 @@ fn explicit_hidden_files_and_lexicographic_units_are_supported() {
             .as_array()
             .unwrap()
             .len(),
-        3
+        4 // The explicitly included policy receives its own planned review unit.
     );
     e.import_audit_run(&f.run()).unwrap();
     std::fs::write(f.0.join("repo/.policy"), "restricted=false\n").unwrap();
@@ -437,4 +441,405 @@ fn legacy_export_requires_explicit_revalidation_and_preserves_memory() {
     std::fs::write(f.0.join("repo/app.py"), "def changed():\n    return 1\n").unwrap();
     assert!(e.import_audit_run(&output).is_err());
     assert!(e.audit_history(20).unwrap().revisions.is_empty());
+}
+
+#[test]
+fn retained_revision_details_survive_source_changes_and_reject_payload_corruption() {
+    let f = Fixture::new();
+    let e = f.engine();
+    e.init_audit_run(&f.run(), vec![]).unwrap();
+    let first = e.validate_audit_run(&f.run()).unwrap();
+    e.import_audit_run(&f.run()).unwrap();
+    let revision = e.audit_history(1).unwrap().revisions[0].revision_id.clone();
+    let mut second = first.clone();
+    second.metadata.incomplete_reason = Some("second imported revision".into());
+    f.save(&second);
+    e.import_audit_run(&f.run()).unwrap();
+    let latest = e.audit_history(1).unwrap().revisions[0].revision_id.clone();
+    assert_ne!(latest, revision);
+    std::fs::remove_dir_all(f.run()).unwrap();
+    std::fs::write(f.0.join("repo/app.py"), "def changed():\n    return 2\n").unwrap();
+    let detail = e.audit_revision(&revision).unwrap();
+    assert!(!detail.source_freshness_checked);
+    assert!(!detail.execution_observed);
+    assert_eq!(
+        serde_json::to_value(detail.run).unwrap(),
+        serde_json::to_value(&first).unwrap()
+    );
+    assert_eq!(e.audit_history(1).unwrap().revisions[0].revision_id, latest);
+    assert!(e.audit_revision("../outside").is_err());
+    assert!(Fixture::new().engine().audit_revision(&revision).is_err());
+    e.db.connection()
+        .execute(
+            "UPDATE audit_revisions SET payload=?1 WHERE revision_id=?2",
+            rusqlite::params![serde_json::to_string(&second).unwrap(), revision],
+        )
+        .unwrap();
+    assert!(e.audit_revision(&revision).is_err());
+    assert!(e.audit_artifacts(&revision).is_err());
+    e.db.connection()
+        .execute(
+            "UPDATE audit_revisions SET payload=?1 WHERE revision_id=?2",
+            rusqlite::params![" ".repeat(2 * 1024 * 1024 + 1), revision],
+        )
+        .unwrap();
+    assert!(e
+        .audit_revision(&revision)
+        .unwrap_err()
+        .to_string()
+        .contains("size limit"));
+}
+
+#[test]
+fn stored_audit_reads_enforce_byte_limits_and_latest_identity_without_legacy_fallback() {
+    let f = Fixture::new();
+    let e = f.engine();
+    e.init_audit_run(&f.run(), vec![]).unwrap();
+    e.import_audit_run(&f.run()).unwrap();
+    let revision = e.audit_history(1).unwrap().revisions[0].revision_id.clone();
+    let original: String =
+        e.db.connection()
+            .query_row(
+                "SELECT payload FROM audit_revisions WHERE revision_id=?1",
+                [&revision],
+                |row| row.get(0),
+            )
+            .unwrap();
+    // Modern status ignores legacy content instead of eagerly loading it.
+    e.db.set_memory("audit-workflow.latest.v1", &"é".repeat(1024 * 1024 + 1))
+        .unwrap();
+    assert!(e.audit_status().unwrap().available);
+    for payload in [" ".repeat(2 * 1024 * 1024 + 1), "é".repeat(1024 * 1024 + 1)] {
+        e.db.connection()
+            .execute(
+                "UPDATE audit_revisions SET payload=?1 WHERE revision_id=?2",
+                rusqlite::params![payload, revision],
+            )
+            .unwrap();
+        assert!(e
+            .audit_revision(&revision)
+            .unwrap_err()
+            .to_string()
+            .contains("size limit"));
+        assert!(e
+            .audit_status()
+            .unwrap_err()
+            .to_string()
+            .contains("size limit"));
+        assert!(e.audit_artifacts(&revision).is_err());
+    }
+    e.db.connection()
+        .execute(
+            "UPDATE audit_revisions SET payload=?1 WHERE revision_id=?2",
+            rusqlite::params![original, revision],
+        )
+        .unwrap();
+    let mut changed: serde_json::Value = serde_json::from_str(&original).unwrap();
+    changed["metadata"]["run_id"] = serde_json::json!("corrupted-run");
+    e.db.connection()
+        .execute(
+            "UPDATE audit_revisions SET payload=?1 WHERE revision_id=?2",
+            rusqlite::params![changed.to_string(), revision],
+        )
+        .unwrap();
+    assert!(e
+        .audit_status()
+        .unwrap_err()
+        .to_string()
+        .contains("revision identity"));
+    e.db.connection()
+        .execute(
+            "UPDATE audit_revisions SET payload=?1 WHERE revision_id=?2",
+            rusqlite::params![original, revision],
+        )
+        .unwrap();
+    e.db.connection().execute("INSERT INTO audit_artifacts(project_id,revision_id,name,payload) VALUES(?1,?2,'zz-extra','{}')", rusqlite::params![e.project_id, revision]).unwrap();
+    assert!(e
+        .audit_artifacts(&revision)
+        .unwrap_err()
+        .to_string()
+        .contains("count exceeds"));
+    e.db.connection()
+        .execute(
+            "DELETE FROM audit_artifacts WHERE revision_id=?1 AND name='zz-extra'",
+            [&revision],
+        )
+        .unwrap();
+    e.db.connection()
+        .execute(
+            "UPDATE audit_artifacts SET payload=?1 WHERE revision_id=?2",
+            rusqlite::params!["é".repeat(1024 * 1024 + 1), revision],
+        )
+        .unwrap();
+    assert!(e
+        .audit_artifacts(&revision)
+        .unwrap_err()
+        .to_string()
+        .contains("size limit"));
+    e.db.connection()
+        .execute(
+            "DELETE FROM audit_latest WHERE project_id=?1",
+            [&e.project_id],
+        )
+        .unwrap();
+    assert!(e
+        .audit_status()
+        .unwrap_err()
+        .to_string()
+        .contains("size limit"));
+}
+
+#[test]
+fn legacy_export_and_status_share_bounded_repository_validation_before_writes() {
+    let f = Fixture::new();
+    let e = f.engine();
+    e.init_audit_run(&f.run(), vec![]).unwrap();
+    let mut run = e.validate_audit_run(&f.run()).unwrap();
+    let output = f.0.join("recovered");
+    for value in [" ".repeat(2 * 1024 * 1024 + 1), "é".repeat(1024 * 1024 + 1)] {
+        e.db.set_memory("audit-workflow.latest.v1", &value).unwrap();
+        assert!(e
+            .export_legacy_audit_run(&output)
+            .unwrap_err()
+            .to_string()
+            .contains("size limit"));
+        assert!(e
+            .audit_status()
+            .unwrap_err()
+            .to_string()
+            .contains("size limit"));
+        assert!(!output.exists());
+        assert_eq!(
+            e.db.get_memory("audit-workflow.latest.v1")
+                .unwrap()
+                .unwrap(),
+            value
+        );
+    }
+    run.metadata.repo = "another-repository".into();
+    e.db.set_memory(
+        "audit-workflow.latest.v1",
+        &serde_json::to_string(&run).unwrap(),
+    )
+    .unwrap();
+    assert!(e
+        .export_legacy_audit_run(&output)
+        .unwrap_err()
+        .to_string()
+        .contains("another repository"));
+    assert!(e
+        .audit_status()
+        .unwrap_err()
+        .to_string()
+        .contains("another repository"));
+    assert!(!output.exists());
+    assert!(e.audit_history(20).unwrap().revisions.is_empty());
+}
+
+#[test]
+fn planned_coverage_includes_all_selected_text_surfaces_without_static_coverage_claims() {
+    use std::collections::BTreeSet;
+    let f = Fixture::new();
+    std::fs::write(f.0.join("repo/app.py"), "def broken(:\n").unwrap();
+    for (name, source) in [
+        ("README.md", "# Threat boundaries\n"),
+        ("settings.custom", "permissions = unrestricted\n"),
+        (".agent.json", "{}\n"),
+        ("Cargo.lock", "version = 4\n"),
+    ] {
+        std::fs::write(f.0.join("repo").join(name), source).unwrap();
+    }
+    std::fs::write(f.0.join("repo/opaque.bin"), [0xff, 0xfe]).unwrap();
+    let e = f.engine();
+    let metadata = e
+        .init_audit_run(
+            &f.run(),
+            vec![
+                "README.md".into(),
+                "settings.custom".into(),
+                ".agent.json".into(),
+                "Cargo.lock".into(),
+                "opaque.bin".into(),
+            ],
+        )
+        .unwrap();
+    let expected: BTreeSet<_> = [
+        "app.py",
+        "README.md",
+        "settings.custom",
+        ".agent.json",
+        "Cargo.lock",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    assert_eq!(
+        metadata
+            .source_manifest
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        expected
+    );
+    assert!(metadata
+        .snapshot_notes
+        .iter()
+        .any(|note| note.contains("Non-UTF8 file omitted: opaque.bin")));
+    let run = e.validate_audit_run(&f.run()).unwrap();
+    let units = run.coverage.as_array().unwrap();
+    let planned = units
+        .iter()
+        .map(|unit| {
+            assert_eq!(unit["status"], "planned");
+            assert!(unit["attempts"].as_array().unwrap().is_empty());
+            assert!(unit["reviewed_paths"].as_array().unwrap().is_empty());
+            assert_eq!(unit["starting_paths"].as_array().unwrap().len(), 1);
+            unit["starting_paths"][0].as_str().unwrap().to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(planned, expected);
+    assert_eq!(units.len(), expected.len());
+    let index: Value =
+        serde_json::from_slice(&std::fs::read(f.run().join("index-evidence.json")).unwrap())
+            .unwrap();
+    assert_eq!(index["complete"], false);
+    assert_eq!(index["files_indexed"], 0);
+    let status = e.import_audit_run(&f.run()).unwrap();
+    assert!(status.partial_coverage);
+    assert_eq!(status.coverage_counts["planned"], expected.len());
+}
+
+#[test]
+fn complete_audits_account_for_selected_paths_and_status_requires_reviewed_coverage() {
+    let f = Fixture::new();
+    std::fs::write(f.0.join("repo/extra.py"), "VALUE = 1\n").unwrap();
+    let e = f.engine();
+    e.init_audit_run(&f.run(), vec![]).unwrap();
+    let mut run = e.validate_audit_run(&f.run()).unwrap();
+    let _ = candidate(&mut run, "needs_validation");
+    run.coverage[0]["status"] = json!("covered");
+    run.coverage[0]["result_fingerprints"] = json!([]);
+    run.coverage.as_array_mut().unwrap().truncate(1);
+    run.metadata.run_status = "complete".into();
+    f.save(&run);
+    assert!(e
+        .validate_audit_run(&f.run())
+        .unwrap_err()
+        .to_string()
+        .contains("omits selected source paths"));
+    assert!(e.import_audit_run(&f.run()).is_err());
+    assert!(e.audit_history(20).unwrap().revisions.is_empty());
+    // Previously retained legacy attestations must also stay partial when paths disappear.
+    e.db.set_memory(
+        "audit-workflow.latest.v1",
+        &serde_json::to_string(&run).unwrap(),
+    )
+    .unwrap();
+    assert!(e.audit_status().unwrap().partial_coverage);
+    // A merged unit may account for both paths without claiming both were reviewed.
+    run.coverage[0]["starting_paths"] = json!(["app.py", "extra.py"]);
+    f.save(&run);
+    e.validate_audit_run(&f.run()).unwrap();
+    assert!(e.import_audit_run(&f.run()).unwrap().partial_coverage);
+    run.coverage[0]["reviewed_paths"] = json!(["app.py", "extra.py"]);
+    run.coverage[0]["local_checks"][0]["reviewed_paths"] = json!(["app.py", "extra.py"]);
+    f.save(&run);
+    assert!(!e.import_audit_run(&f.run()).unwrap().partial_coverage);
+    assert_eq!(e.audit_status().unwrap().coverage_counts["covered"], 1);
+}
+
+#[test]
+fn legacy_status_does_not_report_fresh_coverage_for_an_inconsistent_source_identity() {
+    let f = Fixture::new();
+    let e = f.engine();
+    e.init_audit_run(&f.run(), vec![]).unwrap();
+    let mut run = e.validate_audit_run(&f.run()).unwrap();
+    let _ = candidate(&mut run, "needs_validation");
+    run.coverage[0]["status"] = json!("covered");
+    run.coverage[0]["result_fingerprints"] = json!([]);
+    run.metadata.run_status = "complete".into();
+    f.save(&run);
+    e.validate_audit_run(&f.run()).unwrap();
+    let original = run.metadata.source_snapshot.clone();
+    e.db.set_memory(
+        "audit-workflow.latest.v1",
+        &serde_json::to_string(&run).unwrap(),
+    )
+    .unwrap();
+    assert!(!e.audit_status().unwrap().stale);
+    assert!(!e.audit_status().unwrap().partial_coverage);
+    for invalid in ["".to_owned(), "0".repeat(64)] {
+        run.metadata.source_snapshot = invalid;
+        let encoded = serde_json::to_string(&run).unwrap();
+        e.db.set_memory("audit-workflow.latest.v1", &encoded)
+            .unwrap();
+        let status = e.audit_status().unwrap();
+        assert!(status.stale && status.partial_coverage);
+        assert!(status
+            .notes
+            .iter()
+            .any(|note| note.contains("STORED SNAPSHOT INCONSISTENT")));
+        assert_eq!(
+            e.db.get_memory("audit-workflow.latest.v1")
+                .unwrap()
+                .unwrap(),
+            encoded
+        );
+    }
+    // Recovery preserves invalid legacy records for explicit correction/revalidation.
+    let recovered = f.0.join("recovered-invalid-identity");
+    e.export_legacy_audit_run(&recovered).unwrap();
+    assert!(e.validate_audit_run(&recovered).is_err());
+    assert!(e.audit_history(20).unwrap().revisions.is_empty());
+    run.metadata.source_snapshot = original;
+    e.db.set_memory(
+        "audit-workflow.latest.v1",
+        &serde_json::to_string(&run).unwrap(),
+    )
+    .unwrap();
+    assert!(!e.audit_status().unwrap().stale);
+    assert!(!e.audit_status().unwrap().partial_coverage);
+}
+
+#[test]
+fn audit_history_bounds_metadata_before_returning_retained_summaries() {
+    let f = Fixture::new();
+    let e = f.engine();
+    e.init_audit_run(&f.run(), vec![]).unwrap();
+    e.import_audit_run(&f.run()).unwrap();
+    let history = e.audit_history(20).unwrap();
+    let original = &history.revisions[0];
+    let revision = original.revision_id.clone();
+    for (column, restored) in [
+        ("run_id", original.run_id.clone()),
+        ("source_snapshot", original.source_snapshot.clone()),
+        ("status", original.run_status.clone()),
+        ("imported_at", original.imported_at.clone()),
+    ] {
+        for invalid in [
+            "x".repeat(1024 * 1024),
+            "\u{e9}".repeat(1024 * 1024),
+            "\u{1b}[2J".into(),
+        ] {
+            e.db.connection()
+                .execute(
+                    &format!("UPDATE audit_revisions SET {column}=?1 WHERE revision_id=?2"),
+                    rusqlite::params![invalid, revision],
+                )
+                .unwrap();
+            assert!(e.audit_history(20).is_err(), "{column}");
+        }
+        e.db.connection()
+            .execute(
+                &format!("UPDATE audit_revisions SET {column}=?1 WHERE revision_id=?2"),
+                rusqlite::params![restored, revision],
+            )
+            .unwrap();
+    }
+    let restored = e.audit_history(20).unwrap();
+    assert_eq!(restored.revisions.len(), 1);
+    assert_eq!(restored.revisions[0].revision_id, revision);
+    assert!(restored.revisions[0].is_latest);
+    assert!(!restored.source_freshness_checked);
+    assert!(e.audit_revision(&revision).is_ok());
 }

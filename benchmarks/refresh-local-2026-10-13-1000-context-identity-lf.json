@@ -1,0 +1,1308 @@
+{
+  "schema_version": 1,
+  "binary_sha256": "05b9eef428f0fb3377812b315e62986f2b30d9d8967919bd28572d34f1376707",
+  "binary_sha256_after": "05b9eef428f0fb3377812b315e62986f2b30d9d8967919bd28572d34f1376707",
+  "measurement_valid": true,
+  "measurement_errors": [],
+  "requested_files": 1000,
+  "repeats": 3,
+  "cold_repeats": 1,
+  "timeout_seconds": 120,
+  "context_measured": true,
+  "fixture_newlines": "lf",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python_version": "3.12.14",
+  "fixture_sha256": "124cebdd9a630076c90bd7e7e03d4ba4fd23dbdb9b5cd6a057748072925bdf52",
+  "scope": "Synthetic independent Python modules; wall time includes startup and SQLite. Cold means fresh database, not cold OS caches. Nearest-rank percentiles use complete samples only; small samples are descriptive. No memory, cancellation or competitor measurement.",
+  "summary": {
+    "cold": {
+      "samples": 1,
+      "complete": 1,
+      "p50_ms": 5018.373999999312,
+      "p95_ms": 5018.373999999312
+    },
+    "warm": {
+      "samples": 3,
+      "complete": 3,
+      "p50_ms": 181.47010000029695,
+      "p95_ms": 182.33320000217645
+    },
+    "one_file_changed": {
+      "samples": 3,
+      "complete": 3,
+      "p50_ms": 182.55829999907291,
+      "p95_ms": 184.38830000013695
+    },
+    "context_warm": {
+      "samples": 3,
+      "complete": 3,
+      "p50_ms": 266.44219999798224,
+      "p95_ms": 281.7451000009896
+    },
+    "context_one_file_changed": {
+      "samples": 3,
+      "complete": 3,
+      "p50_ms": 290.82730000300216,
+      "p95_ms": 295.4229999995732
+    }
+  },
+  "samples": {
+    "cold": [
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "7a008eea040a075d2a38584c8fa6c2906d8499e3c96d6f23e4fd737e77c33d40",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-792ugo12\\cold_0",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1000,
+          "unchanged_files": 0,
+          "removed_files": 0,
+          "duration_ms": 4971,
+          "timings": {
+            "source_refresh_ms": 4847,
+            "source_read_ms": 4737,
+            "source_extract_ms": 87,
+            "relationship_analysis_ms": 11,
+            "persistence_ms": 111
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 5018.373999999312
+      }
+    ],
+    "warm": [
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "7a008eea040a075d2a38584c8fa6c2906d8499e3c96d6f23e4fd737e77c33d40",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-792ugo12\\cold_0",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 0,
+          "unchanged_files": 1000,
+          "removed_files": 0,
+          "duration_ms": 161,
+          "timings": {
+            "source_refresh_ms": 114,
+            "source_read_ms": 78,
+            "source_extract_ms": 0,
+            "relationship_analysis_ms": 11,
+            "persistence_ms": 35
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 181.47010000029695
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "7a008eea040a075d2a38584c8fa6c2906d8499e3c96d6f23e4fd737e77c33d40",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-792ugo12\\cold_0",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 0,
+          "unchanged_files": 1000,
+          "removed_files": 0,
+          "duration_ms": 161,
+          "timings": {
+            "source_refresh_ms": 111,
+            "source_read_ms": 76,
+            "source_extract_ms": 0,
+            "relationship_analysis_ms": 12,
+            "persistence_ms": 37
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 182.33320000217645
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "7a008eea040a075d2a38584c8fa6c2906d8499e3c96d6f23e4fd737e77c33d40",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-792ugo12\\cold_0",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 0,
+          "unchanged_files": 1000,
+          "removed_files": 0,
+          "duration_ms": 157,
+          "timings": {
+            "source_refresh_ms": 109,
+            "source_read_ms": 74,
+            "source_extract_ms": 0,
+            "relationship_analysis_ms": 12,
+            "persistence_ms": 35
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 177.71730000094976
+      }
+    ],
+    "one_file_changed": [
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "7a008eea040a075d2a38584c8fa6c2906d8499e3c96d6f23e4fd737e77c33d40",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-792ugo12\\cold_0",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1,
+          "unchanged_files": 999,
+          "removed_files": 0,
+          "duration_ms": 161,
+          "timings": {
+            "source_refresh_ms": 112,
+            "source_read_ms": 76,
+            "source_extract_ms": 0,
+            "relationship_analysis_ms": 13,
+            "persistence_ms": 35
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 182.55829999907291
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "7a008eea040a075d2a38584c8fa6c2906d8499e3c96d6f23e4fd737e77c33d40",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-792ugo12\\cold_0",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1,
+          "unchanged_files": 999,
+          "removed_files": 0,
+          "duration_ms": 164,
+          "timings": {
+            "source_refresh_ms": 116,
+            "source_read_ms": 80,
+            "source_extract_ms": 0,
+            "relationship_analysis_ms": 12,
+            "persistence_ms": 35
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 184.38830000013695
+      },
+      {
+        "status": "complete",
+        "index": {
+          "project_id": "7a008eea040a075d2a38584c8fa6c2906d8499e3c96d6f23e4fd737e77c33d40",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-792ugo12\\cold_0",
+          "files_indexed": 1000,
+          "symbols": 2000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1,
+          "unchanged_files": 999,
+          "removed_files": 0,
+          "duration_ms": 158,
+          "timings": {
+            "source_refresh_ms": 110,
+            "source_read_ms": 75,
+            "source_extract_ms": 0,
+            "relationship_analysis_ms": 11,
+            "persistence_ms": 35
+          },
+          "complete": true,
+          "coverage_notes": []
+        },
+        "exit_code": 0,
+        "elapsed_ms": 178.7704999987909
+      }
+    ],
+    "context_warm": [
+      {
+        "status": "complete",
+        "expected_source_snapshot": "a3af51f8b353b501a690735f001c9498a8f2edab9bc0f9d854c3631ad8638e98",
+        "context": {
+          "backend": {
+            "name": "sentinel-native",
+            "version": "0.1.0",
+            "semantics_revision": 11
+          },
+          "source_snapshot": "a3af51f8b353b501a690735f001c9498a8f2edab9bc0f9d854c3631ad8638e98",
+          "target": "helper_0",
+          "target_symbols": [
+            {
+              "id": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+              "name": "helper_0",
+              "qualified_name": "helper_0",
+              "kind": "function",
+              "location": {
+                "file": "module_00000.py",
+                "start_line": 1,
+                "end_line": 2
+              },
+              "language": "python",
+              "content_hash": "39e363e9762c6dab52cd40e235b6846c8cafe50ee13c93270900c3556eaf90bf"
+            }
+          ],
+          "omitted_target_symbols": 0,
+          "selected_items": [
+            {
+              "relevance_score": 100,
+              "reason_selected": [
+                "target symbol"
+              ],
+              "evidence": {
+                "kind": "symbol",
+                "data": {
+                  "id": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+                  "name": "helper_0",
+                  "qualified_name": "helper_0",
+                  "kind": "function",
+                  "location": {
+                    "file": "module_00000.py",
+                    "start_line": 1,
+                    "end_line": 2
+                  },
+                  "language": "python",
+                  "content_hash": "39e363e9762c6dab52cd40e235b6846c8cafe50ee13c93270900c3556eaf90bf"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "javascript-detect-insecure-websocket",
+                  "severity": "Medium",
+                  "languages": [
+                    "regex"
+                  ],
+                  "message": "Insecure remote WebSocket URL detected. Use wss for encrypted connections.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-debug-server",
+                  "severity": "High",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Debug server explicitly enabled. Disable debug mode in deployed applications; interactive debuggers can expose internals or permit code execution.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-insecure-hash-function",
+                  "severity": "Medium",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Insecure MD4 or MD5 hashing detected; use a modern digest for security decisions.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-unverified-ssl-context",
+                  "severity": "High",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Unverified SSL context detected. This will permit insecure connections without verifying SSL certificates. Use 'ssl.create_default_context' instead.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 80,
+              "reason_selected": [
+                "same file as target"
+              ],
+              "evidence": {
+                "kind": "symbol",
+                "data": {
+                  "id": "1c079dc508283eb01510b317b8ff1213cafac42b8de276b40fe6d5b58599f2e2",
+                  "name": "<module>",
+                  "qualified_name": "module_00000.py",
+                  "kind": "module",
+                  "location": {
+                    "file": "module_00000.py",
+                    "start_line": 1,
+                    "end_line": 2
+                  },
+                  "language": "python",
+                  "content_hash": "c022e1d715e86a03ab8773cebb62620fedf3ad6e97c5034f266ba301a5e619f7"
+                }
+              }
+            },
+            {
+              "relevance_score": 70,
+              "reason_selected": [
+                "AST-resolved security relationship"
+              ],
+              "evidence": {
+                "kind": "relationship",
+                "data": {
+                  "from": "57a885e1b670dab419a5313a97acaceaa76b6cf724568e0187215c39058a1710",
+                  "to": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+                  "kind": "DEFINES",
+                  "file": "module_00000.py",
+                  "line": 1,
+                  "name": "helper_0",
+                  "resolved": true
+                }
+              }
+            }
+          ],
+          "omitted_count": 0,
+          "complete": true,
+          "coverage_notes": [
+            "Git change information unavailable",
+            "Security guards are annotations, not proof of authorization correctness. Dynamic dispatch and advanced aliasing require manual review."
+          ],
+          "duration_ms": 259
+        },
+        "exit_code": 0,
+        "elapsed_ms": 281.7451000009896
+      },
+      {
+        "status": "complete",
+        "expected_source_snapshot": "a3af51f8b353b501a690735f001c9498a8f2edab9bc0f9d854c3631ad8638e98",
+        "context": {
+          "backend": {
+            "name": "sentinel-native",
+            "version": "0.1.0",
+            "semantics_revision": 11
+          },
+          "source_snapshot": "a3af51f8b353b501a690735f001c9498a8f2edab9bc0f9d854c3631ad8638e98",
+          "target": "helper_0",
+          "target_symbols": [
+            {
+              "id": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+              "name": "helper_0",
+              "qualified_name": "helper_0",
+              "kind": "function",
+              "location": {
+                "file": "module_00000.py",
+                "start_line": 1,
+                "end_line": 2
+              },
+              "language": "python",
+              "content_hash": "39e363e9762c6dab52cd40e235b6846c8cafe50ee13c93270900c3556eaf90bf"
+            }
+          ],
+          "omitted_target_symbols": 0,
+          "selected_items": [
+            {
+              "relevance_score": 100,
+              "reason_selected": [
+                "target symbol"
+              ],
+              "evidence": {
+                "kind": "symbol",
+                "data": {
+                  "id": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+                  "name": "helper_0",
+                  "qualified_name": "helper_0",
+                  "kind": "function",
+                  "location": {
+                    "file": "module_00000.py",
+                    "start_line": 1,
+                    "end_line": 2
+                  },
+                  "language": "python",
+                  "content_hash": "39e363e9762c6dab52cd40e235b6846c8cafe50ee13c93270900c3556eaf90bf"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "javascript-detect-insecure-websocket",
+                  "severity": "Medium",
+                  "languages": [
+                    "regex"
+                  ],
+                  "message": "Insecure remote WebSocket URL detected. Use wss for encrypted connections.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-debug-server",
+                  "severity": "High",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Debug server explicitly enabled. Disable debug mode in deployed applications; interactive debuggers can expose internals or permit code execution.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-insecure-hash-function",
+                  "severity": "Medium",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Insecure MD4 or MD5 hashing detected; use a modern digest for security decisions.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-unverified-ssl-context",
+                  "severity": "High",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Unverified SSL context detected. This will permit insecure connections without verifying SSL certificates. Use 'ssl.create_default_context' instead.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 80,
+              "reason_selected": [
+                "same file as target"
+              ],
+              "evidence": {
+                "kind": "symbol",
+                "data": {
+                  "id": "1c079dc508283eb01510b317b8ff1213cafac42b8de276b40fe6d5b58599f2e2",
+                  "name": "<module>",
+                  "qualified_name": "module_00000.py",
+                  "kind": "module",
+                  "location": {
+                    "file": "module_00000.py",
+                    "start_line": 1,
+                    "end_line": 2
+                  },
+                  "language": "python",
+                  "content_hash": "c022e1d715e86a03ab8773cebb62620fedf3ad6e97c5034f266ba301a5e619f7"
+                }
+              }
+            },
+            {
+              "relevance_score": 70,
+              "reason_selected": [
+                "AST-resolved security relationship"
+              ],
+              "evidence": {
+                "kind": "relationship",
+                "data": {
+                  "from": "57a885e1b670dab419a5313a97acaceaa76b6cf724568e0187215c39058a1710",
+                  "to": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+                  "kind": "DEFINES",
+                  "file": "module_00000.py",
+                  "line": 1,
+                  "name": "helper_0",
+                  "resolved": true
+                }
+              }
+            }
+          ],
+          "omitted_count": 0,
+          "complete": true,
+          "coverage_notes": [
+            "Git change information unavailable",
+            "Security guards are annotations, not proof of authorization correctness. Dynamic dispatch and advanced aliasing require manual review."
+          ],
+          "duration_ms": 250
+        },
+        "exit_code": 0,
+        "elapsed_ms": 266.44219999798224
+      },
+      {
+        "status": "complete",
+        "expected_source_snapshot": "a3af51f8b353b501a690735f001c9498a8f2edab9bc0f9d854c3631ad8638e98",
+        "context": {
+          "backend": {
+            "name": "sentinel-native",
+            "version": "0.1.0",
+            "semantics_revision": 11
+          },
+          "source_snapshot": "a3af51f8b353b501a690735f001c9498a8f2edab9bc0f9d854c3631ad8638e98",
+          "target": "helper_0",
+          "target_symbols": [
+            {
+              "id": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+              "name": "helper_0",
+              "qualified_name": "helper_0",
+              "kind": "function",
+              "location": {
+                "file": "module_00000.py",
+                "start_line": 1,
+                "end_line": 2
+              },
+              "language": "python",
+              "content_hash": "39e363e9762c6dab52cd40e235b6846c8cafe50ee13c93270900c3556eaf90bf"
+            }
+          ],
+          "omitted_target_symbols": 0,
+          "selected_items": [
+            {
+              "relevance_score": 100,
+              "reason_selected": [
+                "target symbol"
+              ],
+              "evidence": {
+                "kind": "symbol",
+                "data": {
+                  "id": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+                  "name": "helper_0",
+                  "qualified_name": "helper_0",
+                  "kind": "function",
+                  "location": {
+                    "file": "module_00000.py",
+                    "start_line": 1,
+                    "end_line": 2
+                  },
+                  "language": "python",
+                  "content_hash": "39e363e9762c6dab52cd40e235b6846c8cafe50ee13c93270900c3556eaf90bf"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "javascript-detect-insecure-websocket",
+                  "severity": "Medium",
+                  "languages": [
+                    "regex"
+                  ],
+                  "message": "Insecure remote WebSocket URL detected. Use wss for encrypted connections.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-debug-server",
+                  "severity": "High",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Debug server explicitly enabled. Disable debug mode in deployed applications; interactive debuggers can expose internals or permit code execution.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-insecure-hash-function",
+                  "severity": "Medium",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Insecure MD4 or MD5 hashing detected; use a modern digest for security decisions.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-unverified-ssl-context",
+                  "severity": "High",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Unverified SSL context detected. This will permit insecure connections without verifying SSL certificates. Use 'ssl.create_default_context' instead.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 80,
+              "reason_selected": [
+                "same file as target"
+              ],
+              "evidence": {
+                "kind": "symbol",
+                "data": {
+                  "id": "1c079dc508283eb01510b317b8ff1213cafac42b8de276b40fe6d5b58599f2e2",
+                  "name": "<module>",
+                  "qualified_name": "module_00000.py",
+                  "kind": "module",
+                  "location": {
+                    "file": "module_00000.py",
+                    "start_line": 1,
+                    "end_line": 2
+                  },
+                  "language": "python",
+                  "content_hash": "c022e1d715e86a03ab8773cebb62620fedf3ad6e97c5034f266ba301a5e619f7"
+                }
+              }
+            },
+            {
+              "relevance_score": 70,
+              "reason_selected": [
+                "AST-resolved security relationship"
+              ],
+              "evidence": {
+                "kind": "relationship",
+                "data": {
+                  "from": "57a885e1b670dab419a5313a97acaceaa76b6cf724568e0187215c39058a1710",
+                  "to": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+                  "kind": "DEFINES",
+                  "file": "module_00000.py",
+                  "line": 1,
+                  "name": "helper_0",
+                  "resolved": true
+                }
+              }
+            }
+          ],
+          "omitted_count": 0,
+          "complete": true,
+          "coverage_notes": [
+            "Git change information unavailable",
+            "Security guards are annotations, not proof of authorization correctness. Dynamic dispatch and advanced aliasing require manual review."
+          ],
+          "duration_ms": 243
+        },
+        "exit_code": 0,
+        "elapsed_ms": 259.77659999989555
+      }
+    ],
+    "context_one_file_changed": [
+      {
+        "status": "complete",
+        "expected_source_snapshot": "af56a91f89a49e0788f8a841314e8492266d2cc514c7436cca051b5ec635a05e",
+        "context": {
+          "backend": {
+            "name": "sentinel-native",
+            "version": "0.1.0",
+            "semantics_revision": 11
+          },
+          "source_snapshot": "af56a91f89a49e0788f8a841314e8492266d2cc514c7436cca051b5ec635a05e",
+          "target": "helper_0",
+          "target_symbols": [
+            {
+              "id": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+              "name": "helper_0",
+              "qualified_name": "helper_0",
+              "kind": "function",
+              "location": {
+                "file": "module_00000.py",
+                "start_line": 1,
+                "end_line": 2
+              },
+              "language": "python",
+              "content_hash": "a44d0e18562ff0ff930d3ca138fb78bd67f6d4fbc03feade39074260e4a31511"
+            }
+          ],
+          "omitted_target_symbols": 0,
+          "selected_items": [
+            {
+              "relevance_score": 100,
+              "reason_selected": [
+                "target symbol"
+              ],
+              "evidence": {
+                "kind": "symbol",
+                "data": {
+                  "id": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+                  "name": "helper_0",
+                  "qualified_name": "helper_0",
+                  "kind": "function",
+                  "location": {
+                    "file": "module_00000.py",
+                    "start_line": 1,
+                    "end_line": 2
+                  },
+                  "language": "python",
+                  "content_hash": "a44d0e18562ff0ff930d3ca138fb78bd67f6d4fbc03feade39074260e4a31511"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "javascript-detect-insecure-websocket",
+                  "severity": "Medium",
+                  "languages": [
+                    "regex"
+                  ],
+                  "message": "Insecure remote WebSocket URL detected. Use wss for encrypted connections.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-debug-server",
+                  "severity": "High",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Debug server explicitly enabled. Disable debug mode in deployed applications; interactive debuggers can expose internals or permit code execution.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-insecure-hash-function",
+                  "severity": "Medium",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Insecure MD4 or MD5 hashing detected; use a modern digest for security decisions.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-unverified-ssl-context",
+                  "severity": "High",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Unverified SSL context detected. This will permit insecure connections without verifying SSL certificates. Use 'ssl.create_default_context' instead.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 80,
+              "reason_selected": [
+                "same file as target"
+              ],
+              "evidence": {
+                "kind": "symbol",
+                "data": {
+                  "id": "1c079dc508283eb01510b317b8ff1213cafac42b8de276b40fe6d5b58599f2e2",
+                  "name": "<module>",
+                  "qualified_name": "module_00000.py",
+                  "kind": "module",
+                  "location": {
+                    "file": "module_00000.py",
+                    "start_line": 1,
+                    "end_line": 2
+                  },
+                  "language": "python",
+                  "content_hash": "0e279b1956f31a71c944daa3f0fc2653c51768d3d6a378773689194aeaaf5aa2"
+                }
+              }
+            },
+            {
+              "relevance_score": 70,
+              "reason_selected": [
+                "AST-resolved security relationship"
+              ],
+              "evidence": {
+                "kind": "relationship",
+                "data": {
+                  "from": "57a885e1b670dab419a5313a97acaceaa76b6cf724568e0187215c39058a1710",
+                  "to": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+                  "kind": "DEFINES",
+                  "file": "module_00000.py",
+                  "line": 1,
+                  "name": "helper_0",
+                  "resolved": true
+                }
+              }
+            }
+          ],
+          "omitted_count": 0,
+          "complete": true,
+          "coverage_notes": [
+            "Git change information unavailable",
+            "Security guards are annotations, not proof of authorization correctness. Dynamic dispatch and advanced aliasing require manual review."
+          ],
+          "duration_ms": 255
+        },
+        "exit_code": 0,
+        "elapsed_ms": 271.5395000013814
+      },
+      {
+        "status": "complete",
+        "expected_source_snapshot": "baaffc1332c02e418ba8db16e34d579669bc243dcce561d3c996ba1763f6ce47",
+        "context": {
+          "backend": {
+            "name": "sentinel-native",
+            "version": "0.1.0",
+            "semantics_revision": 11
+          },
+          "source_snapshot": "baaffc1332c02e418ba8db16e34d579669bc243dcce561d3c996ba1763f6ce47",
+          "target": "helper_0",
+          "target_symbols": [
+            {
+              "id": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+              "name": "helper_0",
+              "qualified_name": "helper_0",
+              "kind": "function",
+              "location": {
+                "file": "module_00000.py",
+                "start_line": 1,
+                "end_line": 2
+              },
+              "language": "python",
+              "content_hash": "2dbddce256c9f91fc473021a3613ccd2fe13ceab56ad4be2ddb8153f2efd507f"
+            }
+          ],
+          "omitted_target_symbols": 0,
+          "selected_items": [
+            {
+              "relevance_score": 100,
+              "reason_selected": [
+                "target symbol"
+              ],
+              "evidence": {
+                "kind": "symbol",
+                "data": {
+                  "id": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+                  "name": "helper_0",
+                  "qualified_name": "helper_0",
+                  "kind": "function",
+                  "location": {
+                    "file": "module_00000.py",
+                    "start_line": 1,
+                    "end_line": 2
+                  },
+                  "language": "python",
+                  "content_hash": "2dbddce256c9f91fc473021a3613ccd2fe13ceab56ad4be2ddb8153f2efd507f"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "javascript-detect-insecure-websocket",
+                  "severity": "Medium",
+                  "languages": [
+                    "regex"
+                  ],
+                  "message": "Insecure remote WebSocket URL detected. Use wss for encrypted connections.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-debug-server",
+                  "severity": "High",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Debug server explicitly enabled. Disable debug mode in deployed applications; interactive debuggers can expose internals or permit code execution.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-insecure-hash-function",
+                  "severity": "Medium",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Insecure MD4 or MD5 hashing detected; use a modern digest for security decisions.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-unverified-ssl-context",
+                  "severity": "High",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Unverified SSL context detected. This will permit insecure connections without verifying SSL certificates. Use 'ssl.create_default_context' instead.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 80,
+              "reason_selected": [
+                "same file as target"
+              ],
+              "evidence": {
+                "kind": "symbol",
+                "data": {
+                  "id": "1c079dc508283eb01510b317b8ff1213cafac42b8de276b40fe6d5b58599f2e2",
+                  "name": "<module>",
+                  "qualified_name": "module_00000.py",
+                  "kind": "module",
+                  "location": {
+                    "file": "module_00000.py",
+                    "start_line": 1,
+                    "end_line": 2
+                  },
+                  "language": "python",
+                  "content_hash": "ba93c1f0c6cd18c1bda41776dc73c8b1f19912c36891cc0dc2ff536ddca05096"
+                }
+              }
+            },
+            {
+              "relevance_score": 70,
+              "reason_selected": [
+                "AST-resolved security relationship"
+              ],
+              "evidence": {
+                "kind": "relationship",
+                "data": {
+                  "from": "57a885e1b670dab419a5313a97acaceaa76b6cf724568e0187215c39058a1710",
+                  "to": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+                  "kind": "DEFINES",
+                  "file": "module_00000.py",
+                  "line": 1,
+                  "name": "helper_0",
+                  "resolved": true
+                }
+              }
+            }
+          ],
+          "omitted_count": 0,
+          "complete": true,
+          "coverage_notes": [
+            "Git change information unavailable",
+            "Security guards are annotations, not proof of authorization correctness. Dynamic dispatch and advanced aliasing require manual review."
+          ],
+          "duration_ms": 271
+        },
+        "exit_code": 0,
+        "elapsed_ms": 290.82730000300216
+      },
+      {
+        "status": "complete",
+        "expected_source_snapshot": "4399ac8e0e0e6211e60c9024bbb835f6cdf25a4c546c5ca49fd22b35efe70965",
+        "context": {
+          "backend": {
+            "name": "sentinel-native",
+            "version": "0.1.0",
+            "semantics_revision": 11
+          },
+          "source_snapshot": "4399ac8e0e0e6211e60c9024bbb835f6cdf25a4c546c5ca49fd22b35efe70965",
+          "target": "helper_0",
+          "target_symbols": [
+            {
+              "id": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+              "name": "helper_0",
+              "qualified_name": "helper_0",
+              "kind": "function",
+              "location": {
+                "file": "module_00000.py",
+                "start_line": 1,
+                "end_line": 2
+              },
+              "language": "python",
+              "content_hash": "345e0b79e7c6438b46a5ecd1a9476788443e7c2531ebf042b4da0f7aba5a0afa"
+            }
+          ],
+          "omitted_target_symbols": 0,
+          "selected_items": [
+            {
+              "relevance_score": 100,
+              "reason_selected": [
+                "target symbol"
+              ],
+              "evidence": {
+                "kind": "symbol",
+                "data": {
+                  "id": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+                  "name": "helper_0",
+                  "qualified_name": "helper_0",
+                  "kind": "function",
+                  "location": {
+                    "file": "module_00000.py",
+                    "start_line": 1,
+                    "end_line": 2
+                  },
+                  "language": "python",
+                  "content_hash": "345e0b79e7c6438b46a5ecd1a9476788443e7c2531ebf042b4da0f7aba5a0afa"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "javascript-detect-insecure-websocket",
+                  "severity": "Medium",
+                  "languages": [
+                    "regex"
+                  ],
+                  "message": "Insecure remote WebSocket URL detected. Use wss for encrypted connections.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-debug-server",
+                  "severity": "High",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Debug server explicitly enabled. Disable debug mode in deployed applications; interactive debuggers can expose internals or permit code execution.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-insecure-hash-function",
+                  "severity": "Medium",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Insecure MD4 or MD5 hashing detected; use a modern digest for security decisions.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 90,
+              "reason_selected": [
+                "rule supports the target language; applicability does not mean the rule triggered"
+              ],
+              "evidence": {
+                "kind": "rule",
+                "data": {
+                  "id": "python-unverified-ssl-context",
+                  "severity": "High",
+                  "languages": [
+                    "python"
+                  ],
+                  "message": "Unverified SSL context detected. This will permit insecure connections without verifying SSL certificates. Use 'ssl.create_default_context' instead.",
+                  "mode": "search"
+                }
+              }
+            },
+            {
+              "relevance_score": 80,
+              "reason_selected": [
+                "same file as target"
+              ],
+              "evidence": {
+                "kind": "symbol",
+                "data": {
+                  "id": "1c079dc508283eb01510b317b8ff1213cafac42b8de276b40fe6d5b58599f2e2",
+                  "name": "<module>",
+                  "qualified_name": "module_00000.py",
+                  "kind": "module",
+                  "location": {
+                    "file": "module_00000.py",
+                    "start_line": 1,
+                    "end_line": 2
+                  },
+                  "language": "python",
+                  "content_hash": "2e3e26e5035e2f965a9017799c063b6b159b0f29c014d3f15f48b802c3d96310"
+                }
+              }
+            },
+            {
+              "relevance_score": 70,
+              "reason_selected": [
+                "AST-resolved security relationship"
+              ],
+              "evidence": {
+                "kind": "relationship",
+                "data": {
+                  "from": "57a885e1b670dab419a5313a97acaceaa76b6cf724568e0187215c39058a1710",
+                  "to": "3540294fa111a522eb38c5510a9c476ee575dba67d838eb349229fcb277a1233",
+                  "kind": "DEFINES",
+                  "file": "module_00000.py",
+                  "line": 1,
+                  "name": "helper_0",
+                  "resolved": true
+                }
+              }
+            }
+          ],
+          "omitted_count": 0,
+          "complete": true,
+          "coverage_notes": [
+            "Git change information unavailable",
+            "Security guards are annotations, not proof of authorization correctness. Dynamic dispatch and advanced aliasing require manual review."
+          ],
+          "duration_ms": 279
+        },
+        "exit_code": 0,
+        "elapsed_ms": 295.4229999995732
+      }
+    ]
+  }
+}

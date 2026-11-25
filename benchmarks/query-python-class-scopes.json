@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled Python class lexical-scope questions in the existing lexical-method development family; not independently reviewed or held out",
+  "cases": [
+    {
+      "id": "bare-method-call-prefers-module-helper",
+      "family": "python-lexical-method-identity",
+      "class": "python-class-lexical-boundary",
+      "split": "development",
+      "command": "callees",
+      "target": "Worker.run",
+      "symbol_names": "qualified",
+      "files": {
+        "methods.py": "def helper(value):\n    return value\n\nclass Worker:\n    def helper(self, value):\n        return value\n    def run(self, value):\n        return helper(value)\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "methods.py",
+            "helper"
+          ]
+        ],
+        "edges": [
+          [
+            "helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "Worker.run"
+            ],
+            [
+              "methods.py",
+              "helper"
+            ],
+            "helper",
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "class-method-is-not-a-bare-lexical-binding",
+      "family": "python-lexical-method-identity",
+      "class": "python-class-lexical-boundary",
+      "split": "development",
+      "command": "callees",
+      "target": "Worker.run",
+      "symbol_names": "qualified",
+      "files": {
+        "methods.py": "class Worker:\n    def helper(self, value):\n        return value\n    def run(self, value):\n        return helper(value)\n"
+      },
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "Worker.run"
+            ],
+            null,
+            "helper",
+            false
+          ]
+        ]
+      }
+    }
+  ]
+}

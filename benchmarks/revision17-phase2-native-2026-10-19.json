@@ -1,0 +1,513 @@
+{
+  "schema_version": 1,
+  "corpus_sha256": "046a76e0b1e918797387fbde1debfd164e46584ca692dfcb393f5013924f5604",
+  "binary_sha256": "314fd086da85b96ff6c5e5125be41a26d3955f0f9721b0514d3976663c70759d",
+  "binary_sha256_after": "314fd086da85b96ff6c5e5125be41a26d3955f0f9721b0514d3976663c70759d",
+  "measurement_valid": true,
+  "measurement_errors": [],
+  "split": "development",
+  "scope": "case-level detection of mapped rules; additional findings are unscored",
+  "summary": {
+    "tp": 7,
+    "fp": 0,
+    "tn": 7,
+    "fn": 0,
+    "failed": 0,
+    "failed_positive": 0,
+    "failed_negative": 0,
+    "precision": {
+      "value": 1.0,
+      "wilson_95": [
+        0.6456695649333126,
+        1.0
+      ],
+      "denominator": 7
+    },
+    "recall": {
+      "value": 1.0,
+      "wilson_95": [
+        0.6456695649333126,
+        1.0
+      ],
+      "denominator": 7
+    },
+    "completion_rate": {
+      "value": 1.0,
+      "wilson_95": [
+        0.7846891972623643,
+        1.0
+      ],
+      "denominator": 14
+    },
+    "positive_detection_rate": {
+      "value": 1.0,
+      "wilson_95": [
+        0.6456695649333126,
+        1.0
+      ],
+      "denominator": 7
+    },
+    "complete_cases": 14,
+    "total_cases": 14
+  },
+  "per_split": {
+    "development": {
+      "tp": 7,
+      "fp": 0,
+      "tn": 7,
+      "fn": 0,
+      "failed": 0,
+      "failed_positive": 0,
+      "failed_negative": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6456695649333126,
+          1.0
+        ],
+        "denominator": 7
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6456695649333126,
+          1.0
+        ],
+        "denominator": 7
+      },
+      "completion_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.7846891972623643,
+          1.0
+        ],
+        "denominator": 14
+      },
+      "positive_detection_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6456695649333126,
+          1.0
+        ],
+        "denominator": 7
+      },
+      "complete_cases": 14,
+      "total_cases": 14
+    }
+  },
+  "per_class": {
+    "path-traversal": {
+      "tp": 1,
+      "fp": 0,
+      "tn": 1,
+      "fn": 0,
+      "failed": 0,
+      "failed_positive": 0,
+      "failed_negative": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "completion_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.34238022750665303,
+          1.0
+        ],
+        "denominator": 2
+      },
+      "positive_detection_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.20654931437723745,
+          1.0
+        ],
+        "denominator": 1
+      },
+      "complete_cases": 2,
+      "total_cases": 2
+    },
+    "sql-injection": {
+      "tp": 6,
+      "fp": 0,
+      "tn": 6,
+      "fn": 0,
+      "failed": 0,
+      "failed_positive": 0,
+      "failed_negative": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6096657120978346,
+          1.0
+        ],
+        "denominator": 6
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6096657120978346,
+          1.0
+        ],
+        "denominator": 6
+      },
+      "completion_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.7575059933447592,
+          1.0
+        ],
+        "denominator": 12
+      },
+      "positive_detection_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6096657120978346,
+          1.0
+        ],
+        "denominator": 6
+      },
+      "complete_cases": 12,
+      "total_cases": 12
+    }
+  },
+  "per_engine": {
+    "graph": {
+      "tp": 7,
+      "fp": 0,
+      "tn": 7,
+      "fn": 0,
+      "failed": 0,
+      "failed_positive": 0,
+      "failed_negative": 0,
+      "precision": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6456695649333126,
+          1.0
+        ],
+        "denominator": 7
+      },
+      "recall": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6456695649333126,
+          1.0
+        ],
+        "denominator": 7
+      },
+      "completion_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.7846891972623643,
+          1.0
+        ],
+        "denominator": 14
+      },
+      "positive_detection_rate": {
+        "value": 1.0,
+        "wilson_95": [
+          0.6456695649333126,
+          1.0
+        ],
+        "denominator": 7
+      },
+      "complete_cases": 14,
+      "total_cases": 14
+    }
+  },
+  "cases": [
+    {
+      "id": "fastapi-string-route-positive",
+      "family": "fastapi-string-route",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "38b6c22bfa209d7c486088d25c03a4a3bd577ff86240957b06067f558c912629",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 5,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 562.9713999805972
+    },
+    {
+      "id": "fastapi-string-route-safe",
+      "family": "fastapi-string-route",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "f5b2c075cd4b06e714a0ac2bf6b0c89fc0d73c9a7afea133b24cd9467aa6bb34",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 463.12529998249374
+    },
+    {
+      "id": "flask-path-route-positive",
+      "family": "flask-path-route",
+      "class": "path-traversal",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "956f07f93118f4695b7f8f1365cdc107d707d231b5d7e1c0fcbe222783c051a6",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-path-traversal",
+          "line": 5,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 392.5216000061482
+    },
+    {
+      "id": "flask-path-route-safe",
+      "family": "flask-path-route",
+      "class": "path-traversal",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "de854969b7056acff1a3ae045301f32d3b99958851a90e8b7daf63bd4745cf67",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 105.66749999998137
+    },
+    {
+      "id": "namespace-async-positive",
+      "family": "namespace-async",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "fe1fa39cbef561557264e352d309bfa65cfa8bc09408d4dcce974735e71346e8",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 2,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 263.25030002044514
+    },
+    {
+      "id": "namespace-async-safe",
+      "family": "namespace-async",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "0f82104df2f10df0f3ac7312b8449e1efa2b2a29cf64cf3e50b6f9c02b2891c6",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 95.21619998849928
+    },
+    {
+      "id": "mixed-import-alias-positive",
+      "family": "mixed-import-alias",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "fd0a18f80d557dc33e7e5663a48d274b4636a1b8b3100ce898c6a854f4e1dafd",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 2,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 141.4239000005182
+    },
+    {
+      "id": "mixed-import-alias-safe",
+      "family": "mixed-import-alias",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "5b782a67fac5729cfc6d33bea946f2a2e4acd2adff608a013605f8ac21862440",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 155.60430000186898
+    },
+    {
+      "id": "lexical-shadow-positive",
+      "family": "lexical-shadow",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "f85a49e247b234bc190e9f0d05f91774de1ca54cc658c801bf9d402debbfeaa9",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 4,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 153.65809999639168
+    },
+    {
+      "id": "lexical-shadow-safe",
+      "family": "lexical-shadow",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "f75f504a0442b9215cc5868fe9fe17c71bdc4b8d2f18f8349d612912b7986058",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 97.3740000044927
+    },
+    {
+      "id": "object-fields-positive",
+      "family": "object-fields",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "7b27175c95317cdcdeb76f64dfd2d1754f8f4bababed53596c36dd585416fa31",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 1,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 88.56889998423867
+    },
+    {
+      "id": "object-fields-safe",
+      "family": "object-fields",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "c03fdc2c03f2c940a7be166a5a975373ce477738da81a71ce5782796d5edc3be",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 76.79650001227856
+    },
+    {
+      "id": "object-branch-reassignment-positive",
+      "family": "object-branch-reassignment",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": true,
+      "source_sha256": "29db0ed06177f463f2fd3023f14d19db2d85961d32942f552be60965a6285695",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": true,
+      "findings": [
+        {
+          "title": "interproc-sql-injection",
+          "line": 1,
+          "severity": "High"
+        }
+      ],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 226.89360001822934
+    },
+    {
+      "id": "object-branch-reassignment-safe",
+      "family": "object-branch-reassignment",
+      "class": "sql-injection",
+      "split": "development",
+      "positive": false,
+      "source_sha256": "a24b3e08b92db4090474fc076a8fc4f3066c1bc6b14fd446459d2e7c6b2442ec",
+      "engine": "graph",
+      "trace_complete": true,
+      "status": "complete",
+      "detected": false,
+      "findings": [],
+      "unscored_findings": 0,
+      "coverage_notes": [],
+      "files_scanned": 1,
+      "elapsed_ms": 93.14749998156913
+    }
+  ]
+}

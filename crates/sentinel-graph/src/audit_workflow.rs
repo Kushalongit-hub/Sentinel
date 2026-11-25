@@ -60,6 +60,14 @@ pub struct AuditStatus {
     pub notes: Vec<String>,
     pub report: Option<AuditRun>,
 }
+/// Historical imported content; reading does not reconcile current source.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AuditRevisionDetail {
+    pub revision_id: String,
+    pub source_freshness_checked: bool,
+    pub execution_observed: bool,
+    pub run: AuditRun,
+}
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuditHistory {
     pub revisions: Vec<AuditRevision>,
@@ -272,8 +280,9 @@ impl Engine {
             incomplete_reason: None,
         };
         let mut coverage = Vec::new();
-        for file in self.load_files()? {
-            let refs = json!({"surface":format!("{}#file",file.path),"boundary":format!("{}#trust-boundary-to-review",file.path),"subsystem":"repository","attack_class":"ATTACK-CLASSES.md#obvious-things"});
+        // Plan every admitted text surface, including unsupported or malformed code.
+        for path in metadata.source_manifest.keys() {
+            let refs = json!({"surface":format!("{}#file",path),"boundary":format!("{}#trust-boundary-to-review",path),"subsystem":"repository","attack_class":"ATTACK-CLASSES.md#obvious-things"});
             let encode = |s: &str| {
                 s.as_bytes()
                     .iter()
@@ -293,7 +302,7 @@ impl Engine {
                 encode("repository"),
                 encode("ATTACK-CLASSES.md#obvious-things")
             );
-            coverage.push(json!({"coverage_id":id,"canonical_refs":refs,"surface":file.path,"boundary":"Unreviewed; replace during reconnaissance","subsystem":"Repository","attack_class":"Initial source review","starting_paths":[file.path],"ordinary_attack_class_block":"ATTACK-CLASSES.md#obvious-things","selected_companion_blocks":[],"excluded_blocks":[],"prior_status":"new","attempts":[],"wave":1,"status":"planned","agent_id":null,"reviewed_paths":[],"local_checks":[],"result_fingerprints":[],"unresolved":[]}));
+            coverage.push(json!({"coverage_id":id,"canonical_refs":refs,"surface":path,"boundary":"Unreviewed; replace during reconnaissance","subsystem":"Repository","attack_class":"Initial source review","starting_paths":[path],"ordinary_attack_class_block":"ATTACK-CLASSES.md#obvious-things","selected_companion_blocks":[],"excluded_blocks":[],"prior_status":"new","attempts":[],"wave":1,"status":"planned","agent_id":null,"reviewed_paths":[],"local_checks":[],"result_fingerprints":[],"unresolved":[]}));
         }
         coverage.sort_by(|a, b| a["coverage_id"].as_str().cmp(&b["coverage_id"].as_str()));
         let output = new_directory(output)?;
@@ -312,20 +321,35 @@ impl Engine {
         write_new(&output.join("architecture.md"), b"# Reconnaissance pending\n\nUse index-evidence.json and Sentinel MCP to map entry points, trust boundaries, assets, and omitted surfaces. Planned ledger units do not imply coverage.\n")?;
         Ok(metadata)
     }
+    fn legacy_audit(&self) -> Result<Option<AuditRun>> {
+        let value: Option<Vec<u8>> = self
+            .db
+            .connection()
+            .query_row(
+                "SELECT substr(CAST(value AS BLOB),1,?2) FROM memory WHERE key=?1",
+                params![KEY, LIMIT + 1],
+                |row| row.get(0),
+            )
+            .optional()?;
+        value
+            .map(|value| -> Result<AuditRun> {
+                if value.len() > LIMIT {
+                    bail!("legacy audit record exceeds 2 MiB size limit");
+                }
+                let run: AuditRun = serde_json::from_slice(&value)?;
+                if run.metadata.target != self.root || run.metadata.repo != self.project_id {
+                    bail!("legacy audit belongs to another repository");
+                }
+                Ok(run)
+            })
+            .transpose()
+    }
     /// Recover legacy compatibility records without promoting them into audit tables.
     /// Export is not validation; the normal validate/import path remains mandatory.
     pub fn export_legacy_audit_run(&self, output: &Path) -> Result<PathBuf> {
-        let value = self
-            .db
-            .get_memory(KEY)?
+        let run = self
+            .legacy_audit()?
             .context("no legacy audit record available")?;
-        if value.len() > LIMIT {
-            bail!("legacy audit record exceeds 2 MiB");
-        }
-        let run: AuditRun = serde_json::from_str(&value)?;
-        if run.metadata.target != self.root || run.metadata.repo != self.project_id {
-            bail!("legacy audit belongs to another repository");
-        }
         let parent = output
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
@@ -415,6 +439,7 @@ impl Engine {
             .collect();
         let mut linked = BTreeSet::new();
         let mut line_counts = BTreeMap::new();
+        let mut accounted_paths = BTreeSet::new();
         for unit in units {
             if m.run_status == "complete"
                 && ["planned", "assigned", "in_progress"]
@@ -427,12 +452,9 @@ impl Engine {
                     .as_array()
                     .context("coverage paths must be arrays")?
                 {
-                    self.audit_location(
-                        path.as_str().context("invalid source path")?,
-                        None,
-                        m,
-                        &mut line_counts,
-                    )?;
+                    let path = path.as_str().context("invalid source path")?;
+                    accounted_paths.insert(path);
+                    self.audit_location(path, None, m, &mut line_counts)?;
                 }
             }
             for fp in unit["result_fingerprints"]
@@ -461,6 +483,13 @@ impl Engine {
                     )?;
                 }
             }
+        }
+        if m.run_status == "complete"
+            && m.source_manifest
+                .keys()
+                .any(|path| !accounted_paths.contains(path.as_str()))
+        {
+            bail!("complete run omits selected source paths from coverage units");
         }
         let mut review_ids = BTreeSet::new();
         for review in reviews {
@@ -627,37 +656,58 @@ impl Engine {
         tx.commit()?;
         self.audit_status()
     }
-    /// Metadata only, scoped to a retained revision in this repository.
-    /// Legacy revisions are described from their retained payload without inventing
-    /// original file bytes or observed execution. No artifact paths are opened.
-    pub fn audit_artifacts(&self, revision: &str) -> Result<Vec<AuditArtifact>> {
+    /// Read one retained revision without opening source or original artifact paths.
+    pub fn audit_revision(&self, revision: &str) -> Result<AuditRevisionDetail> {
         if revision.len() != 64 || !revision.bytes().all(|b| b.is_ascii_hexdigit()) {
             bail!("revision must be a 64-character hexadecimal identity");
         }
-        let payload: String = self
+        let payload: Vec<u8> = self
             .db
             .connection()
             .query_row(
-                "SELECT payload FROM audit_revisions WHERE project_id=?1 AND revision_id=?2",
-                params![self.project_id, revision],
+                "SELECT substr(CAST(payload AS BLOB),1,?3) FROM audit_revisions WHERE project_id=?1 AND revision_id=?2",
+                params![self.project_id, revision, LIMIT + 1],
                 |r| r.get(0),
             )
             .optional()?
             .context("audit revision not found in this repository")?;
-        let mut stmt = self.db.connection().prepare("SELECT payload FROM audit_artifacts WHERE project_id=?1 AND revision_id=?2 ORDER BY name LIMIT 4")?;
+        if payload.len() > LIMIT {
+            bail!("stored audit exceeds size limit");
+        }
+        let run: AuditRun = serde_json::from_slice(&payload)?;
+        if identity(&run) != revision {
+            bail!("retained audit payload disagrees with revision identity");
+        }
+        Ok(AuditRevisionDetail {
+            revision_id: revision.into(),
+            source_freshness_checked: false,
+            execution_observed: false,
+            run,
+        })
+    }
+    /// Metadata only; no original artifact paths are opened.
+    pub fn audit_artifacts(&self, revision: &str) -> Result<Vec<AuditArtifact>> {
+        let run = self.audit_revision(revision)?.run;
+        let mut stmt = self.db.connection().prepare("SELECT substr(CAST(payload AS BLOB),1,?3) FROM audit_artifacts WHERE project_id=?1 AND revision_id=?2 ORDER BY name LIMIT 5")?;
         let stored = stmt
-            .query_map(params![self.project_id, revision], |r| {
-                r.get::<_, String>(0)
+            .query_map(params![self.project_id, revision, LIMIT + 1], |r| {
+                r.get::<_, Vec<u8>>(0)
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         if stored.is_empty() {
-            return artifact_descriptors(&serde_json::from_str(&payload)?, revision);
+            return artifact_descriptors(&run, revision);
+        }
+        if stored.len() > 4 {
+            bail!("stored artifact count exceeds expected bound");
+        }
+        if stored.iter().any(|payload| payload.len() > LIMIT) {
+            bail!("stored artifact exceeds size limit");
         }
         let actual: Vec<AuditArtifact> = stored
             .into_iter()
-            .map(|s| serde_json::from_str(&s))
+            .map(|s| serde_json::from_slice(&s))
             .collect::<std::result::Result<_, _>>()?;
-        let mut expected = artifact_descriptors(&serde_json::from_str(&payload)?, revision)?;
+        let mut expected = artifact_descriptors(&run, revision)?;
         expected.sort_by(|a, b| a.name.cmp(&b.name));
         if actual != expected {
             bail!("artifact descriptors disagree with retained audit revision");
@@ -670,7 +720,11 @@ impl Engine {
             bail!("audit history limit must be 1..100");
         }
         let mut statement = self.db.connection().prepare(
-            "SELECT r.revision_id,r.run_id,r.source_snapshot,r.status,r.imported_at,
+            "SELECT CAST(substr(CAST(r.revision_id AS BLOB),1,65) AS TEXT),
+             CAST(substr(CAST(r.run_id AS BLOB),1,65) AS TEXT),
+             CAST(substr(CAST(r.source_snapshot AS BLOB),1,65) AS TEXT),
+             CAST(substr(CAST(r.status AS BLOB),1,33) AS TEXT),
+             CAST(substr(CAST(r.imported_at AS BLOB),1,65) AS TEXT),
              EXISTS(SELECT 1 FROM audit_latest l WHERE l.project_id=r.project_id AND l.revision_id=r.revision_id)
              FROM audit_revisions r WHERE r.project_id=?1 ORDER BY r.rowid DESC LIMIT ?2")?;
         let mut revisions = statement
@@ -685,6 +739,21 @@ impl Engine {
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
+        for revision in &revisions {
+            let hash_valid =
+                |hash: &str| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit());
+            if !hash_valid(&revision.revision_id)
+                || !hash_valid(&revision.source_snapshot)
+                || !safe_id(&revision.run_id)
+                || !["in_progress", "complete", "incomplete"]
+                    .contains(&revision.run_status.as_str())
+                || revision.imported_at.is_empty()
+                || revision.imported_at.len() > 64
+                || revision.imported_at.chars().any(char::is_control)
+            {
+                bail!("invalid stored audit history metadata");
+            }
+        }
         let has_more = revisions.len() > limit;
         revisions.truncate(limit);
         Ok(AuditHistory {
@@ -695,22 +764,35 @@ impl Engine {
     }
     pub fn audit_status(&self) -> Result<AuditStatus> {
         let mut status=AuditStatus {available:false,run_id:None,source_snapshot:None,stale:false,run_status:None,coverage_counts:BTreeMap::new(),finding_counts:BTreeMap::new(),partial_coverage:true,notes:vec!["Imported audit verdicts and reviewer identities are attestations, not independently authenticated proof. They do not alter deterministic findings or patch gates.".into()],report:None};
-        let current: Option<String> = self.db.connection().query_row(
-            "SELECT r.payload FROM audit_latest l JOIN audit_revisions r ON r.project_id=l.project_id AND r.revision_id=l.revision_id WHERE l.project_id=?1",
-            [&self.project_id], |row| row.get(0)).optional()?;
-        if let Some(value) = current.or(self.db.get_memory(KEY)?) {
-            if value.len() > LIMIT {
-                bail!("stored audit exceeds size limit");
-            }
-            let run: AuditRun = serde_json::from_str(&value)?;
+        let current: Option<String> = self
+            .db
+            .connection()
+            .query_row(
+                "SELECT substr(revision_id,1,65) FROM audit_latest WHERE project_id=?1",
+                [&self.project_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let run = if let Some(revision) = current {
+            Some(self.audit_revision(&revision)?.run)
+        } else {
+            self.legacy_audit()?
+        };
+        if let Some(run) = run {
             status.available = true;
             status.run_id = Some(run.metadata.run_id.clone());
             status.source_snapshot = Some(run.metadata.source_snapshot.clone());
             status.run_status = Some(run.metadata.run_status.clone());
-            status.stale = self
-                .audit_snapshot(&run.metadata.include_paths)
-                .map(|(m, _)| m != run.metadata.source_manifest)
-                .unwrap_or(true);
+            let snapshot_consistent =
+                identity(&run.metadata.source_manifest) == run.metadata.source_snapshot;
+            if !snapshot_consistent {
+                status.notes.push("STORED SNAPSHOT INCONSISTENT: manifest disagrees with source identity; revalidate recovered evidence.".into());
+            }
+            status.stale = !snapshot_consistent
+                || self
+                    .audit_snapshot(&run.metadata.include_paths)
+                    .map(|(m, _)| m != run.metadata.source_manifest)
+                    .unwrap_or(true);
             for unit in run.coverage.as_array().context("invalid stored coverage")? {
                 *status
                     .coverage_counts
@@ -723,7 +805,21 @@ impl Engine {
                     .entry(finding["verdict"].as_str().unwrap_or("unknown").into())
                     .or_default() += 1;
             }
+            let covered_paths: BTreeSet<_> = run
+                .coverage
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|unit| unit["status"] == "covered")
+                .flat_map(|unit| unit["reviewed_paths"].as_array().into_iter().flatten())
+                .filter_map(Value::as_str)
+                .collect();
             status.partial_coverage = status.stale
+                || run
+                    .metadata
+                    .source_manifest
+                    .keys()
+                    .any(|path| !covered_paths.contains(path.as_str()))
                 || run.metadata.run_status != "complete"
                 || status.coverage_counts.is_empty()
                 || status
@@ -732,7 +828,7 @@ impl Engine {
                     .any(|(s, n)| *n > 0 && s != "covered");
             status.notes.extend(run.metadata.snapshot_notes.clone());
             if status.stale {
-                status.notes.push("SOURCE CHANGED: imported evidence is stale; historical confirmations must be revalidated.".into());
+                status.notes.push("SOURCE CHANGED OR IDENTITY INCONSISTENT: imported evidence is stale; historical confirmations must be revalidated.".into());
             }
             status.report = Some(run);
         }

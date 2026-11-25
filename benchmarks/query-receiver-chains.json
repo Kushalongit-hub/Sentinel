@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled Python/JavaScript receiver-chain development questions; not independently reviewed or held out",
+  "cases": [
+    {
+      "id": "python-receiver-chain-is-not-own-method",
+      "family": "receiver-attribute-chain-boundaries",
+      "class": "receiver-chain-boundaries",
+      "split": "development",
+      "command": "callees",
+      "target": "Worker.run",
+      "symbol_names": "qualified",
+      "files": {
+        "methods.py": "class Worker:\n    def helper(self, value):\n        return value\n    def run(self, value):\n        return self.worker.helper(value)\n"
+      },
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "self.worker.helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "Worker.run"
+            ],
+            null,
+            "self.worker.helper",
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "id": "javascript-receiver-chain-is-not-own-method",
+      "family": "receiver-attribute-chain-boundaries",
+      "class": "receiver-chain-boundaries",
+      "split": "development",
+      "command": "callees",
+      "target": "Worker.run",
+      "symbol_names": "qualified",
+      "files": {
+        "methods.js": "class Worker {\n  helper(value) { return value; }\n  run(value) { return this.worker.helper(value); }\n}\n"
+      },
+      "expected": {
+        "symbols": [],
+        "edges": [
+          [
+            "this.worker.helper",
+            false
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.js",
+              "Worker.run"
+            ],
+            null,
+            "this.worker.helper",
+            false
+          ]
+        ]
+      }
+    }
+  ]
+}

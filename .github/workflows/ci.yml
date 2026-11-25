@@ -29,19 +29,43 @@ jobs:
       - name: Build binary
         run: cargo build --locked --release --bin sentinel
       - name: Check benchmark scoring and corpus validation
-        run: python -m unittest discover -s scripts -p "test_benchmark.py"
+        run: python -m unittest discover -s scripts -p "test_benchmark*.py"
+      - name: Measure static graph query development seed
+        run: python scripts/benchmark_queries.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/query-seed.json --output "$env:RUNNER_TEMP/sentinel-queries.json"
+      - name: Measure directed call endpoints for the same development queries
+        run: python scripts/benchmark_queries.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/query-endpoints.json --output "$env:RUNNER_TEMP/sentinel-query-endpoints.json"
+      - name: Measure qualified method query development cases
+        run: python scripts/benchmark_queries.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/query-qualified.json --output "$env:RUNNER_TEMP/sentinel-query-qualified.json"
+      - name: Measure static trace endpoint development pair
+        run: python scripts/benchmark_queries.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/query-traces.json --output "$env:RUNNER_TEMP/sentinel-query-traces.json"
+      - name: Measure ordered steps for the same trace development pair
+        run: python scripts/benchmark_queries.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/query-trace-steps.json --output "$env:RUNNER_TEMP/sentinel-query-trace-steps.json"
+      - name: Measure Python imported symbol scope development cases
+        run: python scripts/benchmark_queries.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/query-import-scope.json --output "$env:RUNNER_TEMP/sentinel-query-import-scope.json"
+      - name: Measure Python import attribute boundary development cases
+        run: python scripts/benchmark_queries.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/query-import-attributes.json --output "$env:RUNNER_TEMP/sentinel-query-import-attributes.json"
+      - name: Measure direct receiver chain boundary development cases
+        run: python scripts/benchmark_queries.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/query-receiver-chains.json --output "$env:RUNNER_TEMP/sentinel-query-receiver-chains.json"
+      - name: Measure duplicate import target development cases
+        run: python scripts/benchmark_queries.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/query-duplicate-imports.json --output "$env:RUNNER_TEMP/sentinel-query-duplicate-imports.json"
+      - name: Measure Python import statement scope development cases
+        run: python scripts/benchmark_queries.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/query-import-statement-scopes.json --output "$env:RUNNER_TEMP/sentinel-query-import-statement-scopes.json"
+      - name: Measure Python import lexical collision development cases
+        run: python scripts/benchmark_queries.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/query-import-collisions.json --output "$env:RUNNER_TEMP/sentinel-query-import-collisions.json"
+      - name: Measure Python class lexical boundary development cases
+        run: python scripts/benchmark_queries.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/query-python-class-scopes.json --output "$env:RUNNER_TEMP/sentinel-query-python-class-scopes.json"
       - name: Measure development seed corpus
-        run: python scripts/benchmark.py --binary target/release/sentinel.exe --output "$env:RUNNER_TEMP/sentinel-benchmark.json"
+        run: python scripts/benchmark.py --fail-on-regression --binary target/release/sentinel.exe --output "$env:RUNNER_TEMP/sentinel-benchmark.json"
       - name: Measure multi-file flow corpus
-        run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/flows.json --output "$env:RUNNER_TEMP/sentinel-flows.json"
+        run: python scripts/benchmark.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/flows.json --output "$env:RUNNER_TEMP/sentinel-flows.json"
       - name: Measure request-source corpus
-        run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/framework-sources.json --output "$env:RUNNER_TEMP/sentinel-framework-sources.json"
+        run: python scripts/benchmark.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/framework-sources.json --output "$env:RUNNER_TEMP/sentinel-framework-sources.json"
 
       - name: Request metadata development benchmark
-        run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/request-metadata.json --output "$env:RUNNER_TEMP/sentinel-request-metadata.json"
+        run: python scripts/benchmark.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/request-metadata.json --output "$env:RUNNER_TEMP/sentinel-request-metadata.json"
       - name: Phase 2 native development benchmark
-        run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/phase2-native.json --output "$env:RUNNER_TEMP/sentinel-phase2-native.json"
+        run: python scripts/benchmark.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/phase2-native.json --output "$env:RUNNER_TEMP/sentinel-phase2-native.json"
       - name: Express Fastify route development benchmark
-        run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/js-routes.json --output "$env:RUNNER_TEMP/sentinel-js-routes.json"
+        run: python scripts/benchmark.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/js-routes.json --output "$env:RUNNER_TEMP/sentinel-js-routes.json"
       - name: CommonJS and local plugin development benchmark
-        run: python scripts/benchmark.py --binary target/release/sentinel.exe --corpus benchmarks/js-plugins.json --output "$env:RUNNER_TEMP/sentinel-js-plugins.json"
+        run: python scripts/benchmark.py --fail-on-regression --binary target/release/sentinel.exe --corpus benchmarks/js-plugins.json --output "$env:RUNNER_TEMP/sentinel-js-plugins.json"

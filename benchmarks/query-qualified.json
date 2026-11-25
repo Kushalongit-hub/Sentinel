@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "label_status": "author-labelled development cases from one lexical-method family; not independently reviewed or held out",
+  "cases": [
+    {
+      "id": "first-method-callee",
+      "family": "python-lexical-method-identity",
+      "class": "qualified-methods",
+      "split": "development",
+      "command": "callees",
+      "target": "First.run",
+      "symbol_names": "qualified",
+      "files": {
+        "methods.py": "class First:\n    def helper(self):\n        return 1\n    def run(self):\n        return self.helper()\n\nclass Second:\n    def helper(self):\n        return 2\n    def run(self):\n        return self.helper()\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "methods.py",
+            "First.helper"
+          ]
+        ],
+        "edges": [
+          [
+            "self.helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "First.run"
+            ],
+            [
+              "methods.py",
+              "First.helper"
+            ],
+            "self.helper",
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "second-method-callee",
+      "family": "python-lexical-method-identity",
+      "class": "qualified-methods",
+      "split": "development",
+      "command": "callees",
+      "target": "Second.run",
+      "symbol_names": "qualified",
+      "files": {
+        "methods.py": "class First:\n    def helper(self):\n        return 1\n    def run(self):\n        return self.helper()\n\nclass Second:\n    def helper(self):\n        return 2\n    def run(self):\n        return self.helper()\n"
+      },
+      "expected": {
+        "symbols": [
+          [
+            "methods.py",
+            "Second.helper"
+          ]
+        ],
+        "edges": [
+          [
+            "self.helper",
+            true
+          ]
+        ],
+        "endpoint_edges": [
+          [
+            [
+              "methods.py",
+              "Second.run"
+            ],
+            [
+              "methods.py",
+              "Second.helper"
+            ],
+            "self.helper",
+            true
+          ]
+        ]
+      }
+    }
+  ]
+}

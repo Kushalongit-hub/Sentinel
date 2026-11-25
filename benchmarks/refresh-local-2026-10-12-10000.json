@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "binary_sha256": "5591aea9fc8c3b1e16190ca7c6fb676b635eafcdd97d4ec03177a5beab07cda3",
+  "binary_sha256_after": "5591aea9fc8c3b1e16190ca7c6fb676b635eafcdd97d4ec03177a5beab07cda3",
+  "measurement_valid": false,
+  "measurement_errors": [
+    "one or more refreshes failed or omitted fixture scope"
+  ],
+  "requested_files": 10000,
+  "repeats": 1,
+  "timeout_seconds": 120,
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python_version": "3.12.14",
+  "fixture_sha256": "81bf0e70d73787fc4a1a18e59887cd9ed617347d41b9c21be73500ebe101a0ac",
+  "scope": "Synthetic independent Python modules; wall time includes startup and SQLite. Cold means fresh database, not cold OS caches. Nearest-rank percentiles use complete samples only; small samples are descriptive. No memory, cancellation or competitor measurement.",
+  "summary": {
+    "cold": {
+      "samples": 1,
+      "complete": 0,
+      "p50_ms": null,
+      "p95_ms": null
+    },
+    "warm": {
+      "samples": 1,
+      "complete": 0,
+      "p50_ms": null,
+      "p95_ms": null
+    },
+    "one_file_changed": {
+      "samples": 1,
+      "complete": 0,
+      "p50_ms": null,
+      "p95_ms": null
+    }
+  },
+  "samples": {
+    "cold": [
+      {
+        "status": "partial",
+        "index": {
+          "project_id": "a5d36f553a6c18b0acd5d3e3fd1ae74dfc0d0bbfc156d30c9fe446406cf5b3cf",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-vzkixyjw",
+          "files_indexed": 2000,
+          "symbols": 4000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 2000,
+          "unchanged_files": 0,
+          "removed_files": 0,
+          "duration_ms": 16768,
+          "complete": false,
+          "coverage_notes": [
+            "file limit reached (2000)"
+          ]
+        },
+        "exit_code": 2,
+        "elapsed_ms": 19941.13130000187
+      }
+    ],
+    "warm": [
+      {
+        "status": "partial",
+        "index": {
+          "project_id": "a5d36f553a6c18b0acd5d3e3fd1ae74dfc0d0bbfc156d30c9fe446406cf5b3cf",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-vzkixyjw",
+          "files_indexed": 2000,
+          "symbols": 4000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 0,
+          "unchanged_files": 2000,
+          "removed_files": 0,
+          "duration_ms": 230,
+          "complete": false,
+          "coverage_notes": [
+            "file limit reached (2000)"
+          ]
+        },
+        "exit_code": 2,
+        "elapsed_ms": 369.14369999431074
+      }
+    ],
+    "one_file_changed": [
+      {
+        "status": "partial",
+        "index": {
+          "project_id": "a5d36f553a6c18b0acd5d3e3fd1ae74dfc0d0bbfc156d30c9fe446406cf5b3cf",
+          "repository": "\\\\?\\C:\\Users\\kusha\\AppData\\Local\\Temp\\sentinel-refresh-benchmark-vzkixyjw",
+          "files_indexed": 2000,
+          "symbols": 4000,
+          "call_edges": 0,
+          "sources": 0,
+          "sinks": 0,
+          "sanitizers": 0,
+          "security_guards": 0,
+          "changed_files": 1,
+          "unchanged_files": 1999,
+          "removed_files": 0,
+          "duration_ms": 228,
+          "complete": false,
+          "coverage_notes": [
+            "file limit reached (2000)"
+          ]
+        },
+        "exit_code": 2,
+        "elapsed_ms": 375.77099999180064
+      }
+    ]
+  }
+}

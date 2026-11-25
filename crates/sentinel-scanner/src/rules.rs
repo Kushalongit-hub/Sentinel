@@ -115,8 +115,27 @@ impl Rule {
             )));
         }
         if let Some(mode) = &self.mode {
-            if !matches!(mode.as_str(), "taint" | "search" | "grep") {
+            if !matches!(mode.as_str(), "taint" | "search" | "grep" | "secret") {
                 return Err(invalid(format!("unsupported mode {mode}")));
+            }
+            if mode == "secret"
+                && (self.languages.len() != 1
+                    || self.languages[0] != "regex"
+                    || self.pattern_regex.is_none()
+                    || self.pattern.is_some()
+                    || self.patterns.is_some()
+                    || self.pattern_either.is_some()
+                    || self.pattern_not.is_some()
+                    || self.pattern_not_inside.is_some()
+                    || self.pattern_inside.is_some()
+                    || self.pattern_not_regex.is_some()
+                    || self.pattern_sources.is_some()
+                    || self.pattern_sinks.is_some()
+                    || self.pattern_sanitizers.is_some())
+            {
+                return Err(invalid(
+                    "secret mode requires one regex language and one pattern-regex",
+                ));
             }
         }
         Ok(())
@@ -448,22 +467,43 @@ impl RuleEngine {
             spans.sort_by_key(|s| (s.start, s.end));
             spans.dedup();
             for span in spans {
+                if rule.mode.as_deref() == Some("secret")
+                    && !credible_secret_candidate(source, span)
+                {
+                    continue;
+                }
                 let line = source[..span.start].bytes().filter(|b| *b == b'\n').count() + 1;
                 let column =
                     span.start - source[..span.start].rfind('\n').map(|i| i + 1).unwrap_or(0) + 1;
                 let mut f = Finding {
                     id: String::new(),
                     severity: rule.severity(),
-                    confidence: 0.7,
-                    category: "rule".into(),
+                    confidence: if rule.mode.as_deref() == Some("secret") {
+                        0.82
+                    } else {
+                        0.7
+                    },
+                    category: if rule.mode.as_deref() == Some("secret") {
+                        "secret-candidate".into()
+                    } else {
+                        "rule".into()
+                    },
                     file: path.into(),
                     line,
                     title: rule.id.clone(),
                     description: rule.message.clone(),
                     execution_path: vec![],
                     affected_components: vec![],
-                    evidence: vec![format!("column {column}")],
-                    recommendation: String::new(),
+                    evidence: vec![if rule.mode.as_deref() == Some("secret") {
+                        format!("column {column}; matched credential value withheld")
+                    } else {
+                        format!("column {column}")
+                    }],
+                    recommendation: if rule.mode.as_deref() == Some("secret") {
+                        "Revoke and rotate the credential if it was active; remove it from source and use a managed secret store. Review repository history separately.".into()
+                    } else {
+                        String::new()
+                    },
                 };
                 f.stabilize_id();
                 findings.push(f);
@@ -474,6 +514,72 @@ impl RuleEngine {
         Ok(findings)
     }
 }
+
+fn credible_secret_candidate(source: &str, span: MatchSpan) -> bool {
+    let Some(candidate) = source.get(span.start..span.end) else {
+        return false;
+    };
+    let Some(line_start) = source[..span.start]
+        .rfind('\n')
+        .map(|index| index + 1)
+        .or(Some(0))
+    else {
+        return false;
+    };
+    let line_end = source[span.end..]
+        .find('\n')
+        .map(|offset| span.end + offset)
+        .unwrap_or(source.len());
+    let line = &source[line_start..line_end];
+    let local_start = span.start - line_start;
+    let local_end = span.end - line_start;
+    let before: String = line[..local_start]
+        .rsplit([';', ','])
+        .next()
+        .unwrap_or(&line[..local_start])
+        .chars()
+        .rev()
+        .take(48)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let candidate = candidate.to_ascii_lowercase();
+    let after: String = line[local_end..]
+        .chars()
+        .take(48)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    if [
+        "example",
+        "sample",
+        "dummy",
+        "placeholder",
+        "redacted",
+        "changeme",
+    ]
+    .iter()
+    .any(|marker| {
+        before.contains(marker) || candidate.contains(marker) || after.contains(marker)
+    })
+    {
+        return false;
+    }
+
+    let mut counts = [0usize; 256];
+    for byte in candidate.bytes() {
+        counts[byte as usize] += 1;
+    }
+    let len = candidate.len() as f64;
+    let entropy = counts
+        .iter()
+        .filter(|count| **count > 0)
+        .map(|count| {
+            let probability = *count as f64 / len;
+            -probability * probability.log2()
+        })
+        .sum::<f64>();
+    entropy >= 3.0
+}
+
 fn load_dir(dir: &Path, rules: &mut Vec<Rule>) -> Result<()> {
     let mut paths = fs::read_dir(dir)?
         .map(|e| e.map(|e| e.path()))
@@ -658,6 +764,36 @@ mod tests {
                 "spawn(process.env.CMD);",
                 "spawn('fixed');",
             ),
+            (
+                "secret-aws-access-key",
+                "regex",
+                "AKIA7Q5N2M4R8D3T6V1C",
+                "// example key AKIAIOSFODNN7EXAMPLE",
+            ),
+            (
+                "secret-github-token",
+                "regex",
+                "ghp_4Qm7Zp2Vx9Kc5Nw8Rt3Yj6Ha1Bs4Df7G",
+                "// placeholder ghp_REDACTED000000000000000000000000",
+            ),
+            (
+                "secret-google-api-key",
+                "regex",
+                "AIzaSyD7xPq9Lm2Nv5Bc8Rk4Tz1Wh6Fg3Jd0Qa2",
+                "// sample AIza123456789012345678901234567890123",
+            ),
+            (
+                "secret-slack-token",
+                "regex",
+                "xoxb-4-1234567890-1234567890-abcdefghijklmnopqrstuv",
+                "// dummy xoxb-0000000000000000000000000000000000000000",
+            ),
+            (
+                "secret-npm-token",
+                "regex",
+                "npm_0123456789ABCDEF0123456789ABCDEF0123",
+                "// changeme npm_000000000000000000000000000000000000",
+            ),
         ];
         let ids: HashSet<_> = fixtures.iter().map(|f| f.0).collect();
         assert_eq!(ids.len(), engine.len());
@@ -666,6 +802,8 @@ mod tests {
                 "test.rs"
             } else if lang == "python" {
                 "test.py"
+            } else if lang == "regex" {
+                "test.txt"
             } else {
                 "test.js"
             });
@@ -687,6 +825,48 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn provider_secret_findings_withhold_matched_values() {
+        let engine = RuleEngine::load_from_embedded_validated().unwrap();
+        let source = [
+            "AKIA7Q5N2M4R8D3T6V1C",
+            "ghp_4Qm7Zp2Vx9Kc5Nw8Rt3Yj6Ha1Bs4Df7G",
+            "AIzaSyD7xPq9Lm2Nv5Bc8Rk4Tz1Wh6Fg3Jd0Qa2",
+            "xoxb-4-1234567890-1234567890-abcdefghijklmnopqrstuv",
+            "npm_0123456789ABCDEF0123456789ABCDEF0123",
+        ]
+        .join("\n");
+        let findings = engine
+            .scan_checked("regex", &source, Path::new("test.txt"))
+            .unwrap();
+        let serialized = serde_json::to_string(&findings).unwrap();
+
+        assert_eq!(findings.len(), 5);
+        assert!(findings.iter().all(|finding| {
+            finding.category == "secret-candidate"
+                && finding.severity == Severity::High
+                && finding
+                    .evidence
+                    .iter()
+                    .all(|evidence| evidence.contains("matched credential value withheld"))
+        }));
+        for candidate in source.lines() {
+            assert!(!serialized.contains(candidate));
+        }
+    }
+
+    #[test]
+    fn unrelated_placeholder_word_does_not_hide_later_secret_on_same_line() {
+        let engine = RuleEngine::load_from_embedded_validated().unwrap();
+        let source = "const example = \"placeholder\"; const token = \"ghp_4Qm7Zp2Vx9Kc5Nw8Rt3Yj6Ha1Bs4Df7G\";";
+        assert!(engine
+            .scan_checked("regex", source, Path::new("test.txt"))
+            .unwrap()
+            .iter()
+            .any(|finding| finding.title == "secret-github-token"));
+    }
+
     #[test]
     fn reports_every_occurrence_at_actual_line() {
         let e = RuleEngine::load_from_embedded_validated().unwrap();
@@ -709,6 +889,8 @@ mod tests {
         for yaml in ["rules:\n- id: bad\n  message: bad\n  languages: [rust]\n  severity: HIGH\n  pattern: '$CLIENT.call(...)'", "rules:\n- id: bad\n  message: bad\n  languages: [rust]\n  severity: HIGH\n  pattern-not: unsafe"]{
             assert!(RuleEngine::compile(RuleSet::from_yaml(yaml).unwrap().rules).is_err());
         }
+        let invalid_secret = "rules:\n- id: bad-secret\n  message: bad\n  languages: [rust]\n  severity: HIGH\n  mode: secret\n  pattern: unsafe";
+        assert!(RuleEngine::compile(RuleSet::from_yaml(invalid_secret).unwrap().rules).is_err());
     }
     #[test]
     fn exclusion_constraints_apply_to_individual_candidates() {

@@ -33,6 +33,13 @@ pub fn read(root: &Path, args: &[&str], max_bytes: usize) -> crate::Result<Strin
     if let Some(error) = result.execution_error {
         return Err(ScannerError::Parse(format!("Git failed: {error}")));
     }
+    // Scanner exit 1 can mean findings; Git read helpers require successful completion.
+    if result.exit_code != Some(0) {
+        return Err(ScannerError::Parse(format!(
+            "Git failed: exit status {:?}",
+            result.exit_code
+        )));
+    }
     Ok(result.stdout)
 }
 /// Resolve a user-supplied ref to an immutable commit before passing it to other commands.
@@ -137,4 +144,47 @@ pub fn source_at(root: &Path, commit: &str, path: &str) -> crate::Result<String>
     }
     let object = format!("{commit}:{path}");
     read(root, &["show", &object], 1024 * 1024)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    struct Fixture(PathBuf);
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let root = self.0.canonicalize().unwrap();
+            assert!(root.starts_with(std::env::temp_dir().canonicalize().unwrap()));
+            assert!(root
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("sentinel-git-read-test-"));
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+    #[test]
+    fn nonzero_git_reads_reject_partial_stdout_without_changing_scanner_exit_one() {
+        let path =
+            std::env::temp_dir().join(format!("sentinel-git-read-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&path).unwrap();
+        let fixture = Fixture(path);
+        std::fs::write(fixture.0.join("left.txt"), "before\n").unwrap();
+        std::fs::write(fixture.0.join("right.txt"), "after\n").unwrap();
+        let same = read(
+            &fixture.0,
+            &["diff", "--no-index", "--", "left.txt", "left.txt"],
+            4096,
+        )
+        .unwrap();
+        assert!(same.is_empty());
+        let different = read(
+            &fixture.0,
+            &["diff", "--no-index", "--", "left.txt", "right.txt"],
+            4096,
+        )
+        .unwrap_err();
+        assert!(different.to_string().contains("exit status Some(1)"));
+        assert!(!different.to_string().contains("before"));
+        assert!(!different.to_string().contains("after"));
+    }
 }

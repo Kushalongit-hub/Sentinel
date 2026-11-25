@@ -83,19 +83,29 @@ pub fn draw(frame: &mut Frame, app: &App) {
         View::Intelligence => paragraph(
             frame,
             columns[1],
-            "Security graph / verification / audit coverage / audit coverage",
+            "Investigation / graph / verification / audit history",
             app.intelligence_text.clone(),
             app.scroll,
         ),
     }
-    let actions = if app.job.is_some() {
-        "Esc cancel"
+    let actions = if app.busy() {
+        if app.view == View::Intelligence && app.can_cancel_running_job() {
+            "C cancel persisted job / Esc stop workers"
+        } else {
+            "Esc stop workers"
+        }
     } else {
         match app.view {
             View::Overview => "a audit / p project",
             View::Findings => "/ search / e explain / s export",
             View::Rules => "arrows select rule",
             View::Ai => "Alt+m provider / Alt+b preview / Enter send",
+            View::Intelligence if app.static_jobs.is_some() => {
+                "Enter job details / r resume one unit / C cancel / o reload jobs"
+            }
+            View::Intelligence if app.audit_history.is_some() => {
+                "arrows select revision / Enter details / u latest coverage / o jobs"
+            }
             View::Intelligence => "g index / w verify / u coverage / h history / o jobs",
         }
     };
@@ -121,7 +131,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     if app.help {
         let modal = centered(area, 82, 25);
         frame.render_widget(Clear, modal);
-        paragraph(frame,modal,"Keyboard guide","NAVIGATE\n  Tab / Shift+Tab           Switch focus\n  Arrows + Enter             Choose and open section\n  1-5                        Open section directly\n  j / k or arrows            Select finding / rule; scroll evidence\n  PgUp / PgDn / Home         Scroll detail / reset\n\nSECURITY\n  a Audit   d Git diff   g Index graph   w Verify patch   u Audit coverage   h Audit history   o Static jobs\n  / Filter findings   p Project path   t Severity threshold\n  x External scanners   v Semgrep config   s JSON export   S SARIF export\n\nCHAT\n  e Explain selected finding   c Explain codebase\n  Alt+m Provider   Alt+l Local model   Alt+n NIM model\n  Alt+p Project context on/off   Alt+r New chat\n  Alt+b Preview shared context   Enter Send message\n\n  Esc Close / cancel operation    Ctrl+C / q Quit\n  Exports create new files. Cloud submission sends the previewed context.\n  ? or Esc closes. Arrows / PgUp / PgDn scroll.",app.help_scroll);
+        paragraph(frame,modal,"Keyboard guide","NAVIGATE\n  Tab / Shift+Tab           Switch focus\n  Arrows + Enter             Choose and open section\n  1-5                        Open section directly\n  j / k or arrows            Select finding / rule / revision; scroll evidence\n  PgUp / PgDn / Home         Scroll detail / reset\n\nSECURITY\n  a Audit   d Git diff   g Index graph   w Verify patch   u Audit coverage   h Audit history   o Static jobs\n  In history: arrows select revision; Enter opens retained details\n  In jobs: Enter details; r resumes one unit; C cancels; o reloads\n  / Filter findings   p Project path   t Severity threshold\n  x External scanners   v Semgrep config   s JSON export   S SARIF export\n\nCHAT\n  e Explain selected finding   c Explain codebase\n  Alt+m Provider   Alt+l Local model   Alt+n NIM model\n  Alt+p Project context on/off   Alt+r New chat\n  Alt+b Preview shared context   Enter Send message\n\n  Esc Close / cancel operation    Ctrl+C / q Quit\n  Exports create new files. Cloud submission sends the previewed context.\n  ? or Esc closes. Arrows / PgUp / PgDn scroll.",app.help_scroll);
     }
     if let Some(editor) = &app.editor {
         let modal = centered(area, 76, 7);

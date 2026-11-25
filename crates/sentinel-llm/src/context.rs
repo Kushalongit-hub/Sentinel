@@ -61,6 +61,77 @@ fn eligible(path: &Path) -> bool {
             .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
 }
 
+/// Redact entire source lines that look like credential assignments before they
+/// cross the provider boundary. This is conservative defense in depth, not a
+/// complete secret detector: arbitrary literals and novel formats may be missed.
+pub(crate) fn redact_credential_line(line: &str) -> String {
+    let boundary = line.find('=').or_else(|| line.find(':'));
+    let Some(boundary) = boundary else {
+        return line.to_owned();
+    };
+    let key = line[..boundary]
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect::<String>();
+    let looks_sensitive = [
+        "password",
+        "passwd",
+        "secret",
+        "token",
+        "apikey",
+        "accesskey",
+        "authorization",
+        "bearer",
+        "credential",
+        "privatekey",
+        "signingkey",
+    ]
+    .iter()
+    .any(|marker| key.contains(marker));
+    if looks_sensitive || looks_like_provider_token(line) {
+        "[REDACTED: possible secret]".to_owned()
+    } else {
+        line.to_owned()
+    }
+}
+
+pub(crate) fn redact_untrusted_text(text: &str) -> (String, usize) {
+    let mut redacted = 0;
+    let output = text
+        .split_inclusive('\n')
+        .map(|line| {
+            let (body, newline) = line
+                .strip_suffix('\n')
+                .map_or((line, ""), |body| (body, "\n"));
+            let safe = redact_credential_line(body);
+            redacted += usize::from(safe != body);
+            format!("{safe}{newline}")
+        })
+        .collect();
+    (output, redacted)
+}
+
+fn looks_like_provider_token(line: &str) -> bool {
+    let has_suffix = |prefix: &str, minimum: usize, allowed: fn(u8) -> bool| {
+        line.match_indices(prefix).any(|(start, _)| {
+            let suffix = &line.as_bytes()[start + prefix.len()..];
+            suffix.iter().take_while(|byte| allowed(**byte)).count() >= minimum
+        })
+    };
+    let alnum = |byte: u8| byte.is_ascii_alphanumeric();
+    let token_chars = |byte: u8| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-');
+    ["AKIA", "ASIA"]
+        .iter()
+        .any(|prefix| has_suffix(prefix, 16, alnum))
+        || ["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"]
+            .iter()
+            .any(|prefix| has_suffix(prefix, 20, token_chars))
+        || has_suffix("xoxb-", 20, token_chars)
+        || has_suffix("AIza", 35, token_chars)
+        || has_suffix("npm_", 36, alnum)
+}
+
 /// Build one bounded evidence bundle, reused verbatim by every provider in a request.
 /// This is lexical retrieval, not a resolved call graph or embedding index.
 pub fn build_context(
@@ -292,7 +363,7 @@ pub fn build_context_with_budget(
         let mut text = String::new();
         let mut end = start;
         for (i, line) in lines.iter().enumerate().skip(start).take(40) {
-            let fragment = format!("{}: {}\n", i + 1, line);
+            let fragment = format!("{}: {}\n", i + 1, redact_credential_line(line));
             if text.len() + fragment.len() > 2500 {
                 break;
             }
@@ -319,6 +390,17 @@ pub fn build_context_with_budget(
         if context.excerpts.pop().is_none() && context.files.pop().is_none() {
             context.coverage_notes.pop();
         }
+    }
+    let redacted_lines = context
+        .excerpts
+        .iter()
+        .flat_map(|excerpt| excerpt.text.lines())
+        .filter(|line| line.contains("[REDACTED: possible secret]"))
+        .count();
+    if redacted_lines > 0 {
+        context.coverage_notes.push(format!(
+            "potential secret redaction applied to {redacted_lines} excerpt line(s); heuristic coverage is incomplete"
+        ));
     }
     context.snapshot_id = format!(
         "{:x}",
